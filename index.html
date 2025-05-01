@@ -1,9 +1,11 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <title>Nipuna's Portfolio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0"> <style>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
         body {
             margin: 0;
             background: #111;
@@ -13,25 +15,31 @@
             height: 100vh;
             overflow: hidden;
             position: relative;
-            /* Ensure body takes full height for centering */
             width: 100%;
+            font-family: sans-serif;
+            /* Added a basic font family */
         }
+
         canvas {
             border: 4px solid #fff;
             background: #222;
-            /* Make canvas responsive */
-            max-width: 95%; /* Limit max width to prevent overflow on small screens */
-            max-height: 95vh; /* Limit max height */
-            height: auto; /* Maintain aspect ratio */
-            display: block; /* Remove extra space below canvas */
-            margin: auto; /* Center the canvas */
+            max-width: 95%;
+            max-height: 95vh;
+            height: auto;
+            display: block;
+            margin: auto;
+            opacity: 0;
+            /* Initially hide the canvas */
+            transition: opacity 1s ease-in-out;
+            /* Fade in transition */
         }
+
         #gameMessage {
             position: fixed;
             top: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
             padding: 10px 20px;
             border: 1px solid white;
@@ -39,13 +47,13 @@
             opacity: 0;
             transition: opacity 0.5s;
             z-index: 10;
-            /* Ensure message is readable on smaller screens */
             font-size: 0.9em;
             white-space: nowrap;
         }
+
         #tooltipMessage {
             position: absolute;
-            background: rgba(0,0,0,0.8);
+            background: rgba(0, 0, 0, 0.8);
             color: white;
             padding: 5px 10px;
             border: 1px solid white;
@@ -56,17 +64,44 @@
             white-space: nowrap;
             font-size: 0.9em;
         }
+
+        /* Styles for the intro messages */
+        .intro-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white;
+            font-size: 3em;
+            /* Large font size */
+            opacity: 0;
+            /* Initially hidden */
+            transition: opacity 1s ease-in-out;
+            /* Fade transition */
+            z-index: 20;
+            /* Above other elements */
+            text-align: center;
+            pointer-events: none;
+            /* Don't interfere with touch/mouse events */
+        }
     </style>
 </head>
+
 <body>
+    <div id="introMessage1" class="intro-message">hello</div>
+    <div id="introMessage2" class="intro-message">let's play a game</div>
     <canvas id="mazeCanvas" width="600" height="600"></canvas>
     <div id="gameMessage"></div>
     <div id="tooltipMessage"></div>
+
     <script>
         const canvas = document.getElementById('mazeCanvas');
         const ctx = canvas.getContext('2d');
         const gameMessage = document.getElementById('gameMessage');
         const tooltipMessage = document.getElementById('tooltipMessage');
+        const introMessage1 = document.getElementById('introMessage1');
+        const introMessage2 = document.getElementById('introMessage2');
+
         const cellSize = 40;
         // Calculate cols and rows based on canvas size, adjust for responsiveness if needed later
         const cols = canvas.width / cellSize;
@@ -167,16 +202,16 @@
                     const cell = maze[y][x];
                     const closedWalls = Object.values(cell.walls).filter(w => w).length;
                     if (closedWalls >= 3 && !(x === 0 && y === 0)) {
-                        deadEnds.push({x, y});
+                        deadEnds.push({ x, y });
                     }
                 }
             }
 
             // Fallback positions for tricky corners
             const fallbacks = [
-                {x: cols-2, y: 0}, {x: 0, y: rows-1},
-                {x: cols-1, y: 1}, {x: 1, y: rows-1},
-                {x: cols-2, y: rows-2}, {x: 1, y: 1}
+                { x: cols - 2, y: 0 }, { x: 0, y: rows - 1 },
+                { x: cols - 1, y: 1 }, { x: 1, y: rows - 1 },
+                { x: cols - 2, y: rows - 2 }, { x: 1, y: 1 }
             ];
 
             // Combine dead ends and fallbacks
@@ -204,22 +239,22 @@
             while (selected.length < 3) {
                 const key = `${x},${y}`;
                 if (!(x === 0 && y === 0) && !seen.has(key)) {
-                    selected.push({x, y});
+                    selected.push({ x, y });
                     seen.add(key);
                 }
                 x++;
                 if (x >= cols - 1) { x = 1; y++; }
                 if (y >= rows) y = 1;
-                 // Prevent infinite loop if maze is too small or candidates are exhausted
+                // Prevent infinite loop if maze is too small or candidates are exhausted
                 if (x >= cols && y >= rows) break;
             }
 
 
             // Assign Easter egg data with specific icon identifiers
             const eggData = [
-                {tooltip: 'LinkedIn', url: 'https://www.linkedin.com/in/nipuna-h-herath/', icon: 'linkedin'},
-                {tooltip: 'GitHub', url: 'https://github.com/kr4ckhe4d', icon: 'github'},
-                {tooltip: 'About Me', url: 'https://www.instagram.com/kr4ckhe4d/', icon: 'profile'} // Using 'profile' identifier
+                { tooltip: 'LinkedIn', url: 'https://www.linkedin.com/in/nipuna-h-herath/', icon: 'linkedin' },
+                { tooltip: 'GitHub', url: 'https://github.com/kr4ckhe4d', icon: 'github' },
+                { tooltip: 'About Me', url: 'https://www.instagram.com/kr4ckhe4d/', icon: 'profile' } // Using 'profile' identifier
             ];
 
             eggs = selected.slice(0, 3).map((pos, i) => ({
@@ -228,297 +263,25 @@
                 url: eggData[i].url,
                 icon: eggData[i].icon // Use the specific icon identifier
             }));
-             // Ensure player starts at a valid position (0,0)
+            // Ensure player starts at a valid position (0,0)
             player = { x: 0, y: 0 };
         }
 
         function drawPlayer() {
+            const currentCellSizeX = canvas.width / cols;
+            const currentCellSizeY = canvas.height / rows;
             ctx.beginPath();
             ctx.arc(
-                player.x * cellSize + cellSize/2,
-                player.y * cellSize + cellSize/2,
-                cellSize/3,
-                0, Math.PI*2
+                player.x * currentCellSizeX + currentCellSizeX / 2, // Scale player position
+                player.y * currentCellSizeY + currentCellSizeY / 2, // Scale player position
+                Math.min(currentCellSizeX, currentCellSizeY) / 3, // Scale player size
+                0, Math.PI * 2
             );
             ctx.fillStyle = '#00ffcc';
             ctx.fill();
         }
 
         function drawEggs() {
-            eggs.forEach(egg => {
-                const eggX = egg.x * cellSize + cellSize / 2;
-                const eggY = egg.y * cellSize + cellSize / 2;
-
-                // Draw a background circle for the icon
-                ctx.beginPath();
-                ctx.arc(
-                    eggX,
-                    eggY,
-                    cellSize / 3,
-                    0, Math.PI * 2
-                );
-                ctx.fillStyle = 'gold';
-                ctx.fill();
-
-                // Draw the specific icon based on the 'icon' property
-                ctx.fillStyle = '#000'; // Color of the icon/text
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
-
-                switch (egg.icon) {
-                    case 'linkedin':
-                        ctx.font = `${cellSize / 2.5}px Arial`; // Adjust font size for text
-                        ctx.fillText("in", eggX, eggY);
-                        break;
-                    case 'github':
-                        ctx.font = `${cellSize / 2.5}px Arial`; // Adjust font size for text
-                        ctx.fillText("Git", eggX, eggY);
-                        break;
-                    case 'profile':
-                        // Draw a simple profile icon (head and body)
-                        const headRadius = cellSize / 6;
-                        const bodyWidth = cellSize / 3;
-                        const bodyHeight = cellSize / 6;
-
-                        // Head
-                        ctx.beginPath();
-                        ctx.arc(eggX, eggY - headRadius / 2, headRadius, 0, Math.PI * 2);
-                        ctx.fill();
-
-                        // Body (simple rectangle or rounded shape)
-                        ctx.beginPath();
-                        ctx.arc(eggX, eggY + bodyHeight / 2, bodyWidth / 2, 0, Math.PI, false); // Arc for shoulders
-                        ctx.lineTo(eggX + bodyWidth / 2, eggY + bodyHeight / 2);
-                        ctx.lineTo(eggX - bodyWidth / 2, eggY + bodyHeight / 2);
-                        ctx.closePath();
-                        ctx.fill();
-                        break;
-                    default:
-                        // Fallback to a simple dot or text if icon type is unknown
-                        ctx.font = `${cellSize / 3}px Arial`;
-                        ctx.fillText("?", eggX, eggY);
-                }
-            });
-        }
-
-
-        function showMessage(text) {
-            gameMessage.textContent = text;
-            gameMessage.style.opacity = 1;
-            setTimeout(() => {
-                gameMessage.style.opacity = 0;
-            }, 2000);
-        }
-
-        function checkCollision(dx, dy) {
-            const cell = maze[player.y][player.x];
-            if (dx === 1 && cell.walls.right) return true;
-            if (dx === -1 && cell.walls.left) return true;
-            if (dy === 1 && cell.walls.bottom) return true;
-            if (dy === -1 && cell.walls.top) return true;
-            return false;
-        }
-
-        function movePlayer(dx, dy) {
-            if (checkCollision(dx, dy)) return;
-            const newX = player.x + dx;
-            const newY = player.y + dy;
-            if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
-                player.x = newX;
-                player.y = newY;
-
-                // Check for easter egg
-                const egg = eggs.find(e => e.x === newX && e.y === newY);
-                if (egg) {
-                    showMessage(`Redirecting to ${egg.tooltip}...`);
-                    setTimeout(() => {
-                        window.location.href = egg.url;
-                    }, 1000);
-                }
-
-                render();
-            }
-        }
-
-        function handleMouseMove(e) {
-            const rect = canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-
-            if (mouseX < 0 || mouseY < 0 || mouseX >= canvas.width || mouseY >= canvas.height) {
-                tooltipMessage.style.display = 'none';
-                return;
-            }
-
-            const cellX = Math.floor(mouseX / cellSize);
-            const cellY = Math.floor(mouseY / cellSize);
-
-            const egg = eggs.find(e => e.x === cellX && e.y === cellY);
-
-            if (egg) {
-                tooltipMessage.textContent = egg.tooltip;
-                tooltipMessage.style.left = (e.clientX + 10) + 'px';
-                tooltipMessage.style.top = (e.clientY + 10) + 'px';
-                tooltipMessage.style.display = 'block';
-            } else {
-                tooltipMessage.style.display = 'none';
-            }
-        }
-
-        // --- Touch Event Handlers ---
-        canvas.addEventListener('touchstart', (e) => {
-            // Prevent default touch behavior like scrolling
-            e.preventDefault();
-            const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
-        }, { passive: false }); // Use passive: false to allow preventDefault
-
-        canvas.addEventListener('touchend', (e) => {
-            // Prevent default touch behavior
-            e.preventDefault();
-            // Use the last touch point
-            const touch = e.changedTouches[0];
-            const touchEndX = touch.clientX;
-            const touchEndY = touch.clientY;
-
-            const dx = touchEndX - touchStartX;
-            const dy = touchEndY - touchStartY;
-
-            // Determine swipe direction based on the larger movement
-            if (Math.abs(dx) > Math.abs(dy)) {
-                // Horizontal swipe
-                if (Math.abs(dx) > swipeThreshold) {
-                    if (dx > 0) {
-                        movePlayer(1, 0); // Swipe right
-                    } else {
-                        movePlayer(-1, 0); // Swipe left
-                    }
-                }
-            } else {
-                // Vertical swipe
-                if (Math.abs(dy) > swipeThreshold) {
-                    if (dy > 0) {
-                        movePlayer(0, 1); // Swipe down
-                    } else {
-                        movePlayer(0, -1); // Swipe up
-                    }
-                }
-            }
-        }, { passive: false }); // Use passive: false to allow preventDefault
-
-        // Optional: Add touchmove if you want to track movement, though not strictly necessary for simple swipes
-        // canvas.addEventListener('touchmove', (e) => {
-        //     e.preventDefault(); // Prevent scrolling while touching the canvas
-        // }, { passive: false });
-
-
-        // --- Existing Event Listeners ---
-        document.addEventListener('keydown', (e) => {
-            switch(e.key) {
-                case 'ArrowUp':
-                case 'w':
-                    movePlayer(0, -1);
-                    break;
-                case 'ArrowRight':
-                case 'd':
-                    movePlayer(1, 0);
-                    break;
-                case 'ArrowDown':
-                case 's':
-                    movePlayer(0, 1);
-                    break;
-                case 'ArrowLeft':
-                case 'a':
-                    movePlayer(-1, 0);
-                    break;
-            }
-        });
-
-        canvas.addEventListener('mousemove', handleMouseMove);
-        canvas.addEventListener('mouseout', () => {
-            tooltipMessage.style.display = 'none';
-        });
-
-        // Function to handle canvas resizing (for better mobile responsiveness)
-        function resizeCanvas() {
-            const containerWidth = canvas.parentElement.clientWidth;
-            const containerHeight = canvas.parentElement.clientHeight;
-            const size = Math.min(containerWidth, containerHeight); // Use the smaller dimension
-
-            // You might want to recalculate cellSize and potentially regenerate the maze
-            // if you want the maze to scale with the canvas size.
-            // For now, we'll just adjust the canvas element size.
-            canvas.width = size * 0.95; // Use a percentage of the container size
-            canvas.height = size * 0.95;
-
-             // Recalculate cols and rows based on new canvas size
-            // Note: This will change the maze structure on resize.
-            // If you want a fixed maze structure regardless of size,
-            // you'd need a different approach (e.g., scaling the drawing).
-            // For simplicity, we'll regenerate the maze here.
-            // const newCols = Math.floor(canvas.width / cellSize);
-            // const newRows = Math.floor(canvas.height / cellSize);
-            // if (newCols !== cols || newRows !== rows) {
-            //     cols = newCols;
-            //     rows = newRows;
-            //     setupMaze(); // Regenerate maze
-            // }
-
-
-            render(); // Re-render the maze and player
-        }
-
-        // Add resize event listener
-        window.addEventListener('resize', resizeCanvas);
-
-        function render() {
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-             // Adjust drawing based on current canvas size and original cell size
-            const currentCellSizeX = canvas.width / cols;
-            const currentCellSizeY = canvas.height / rows;
-
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                     // Adjust drawing coordinates and wall thickness based on current cell size
-                    const drawX = x * currentCellSizeX;
-                    const drawY = y * currentCellSizeY;
-                    const wallThickness = 2 * (currentCellSizeX / cellSize); // Scale wall thickness
-
-                    ctx.strokeStyle = '#fff';
-                    ctx.lineWidth = wallThickness;
-
-                    if (maze[y][x].walls.top) {
-                        ctx.beginPath();
-                        ctx.moveTo(drawX, drawY);
-                        ctx.lineTo(drawX + currentCellSizeX, drawY);
-                        ctx.stroke();
-                    }
-                    if (maze[y][x].walls.right) {
-                        ctx.beginPath();
-                        ctx.moveTo(drawX + currentCellSizeX, drawY);
-                        ctx.lineTo(drawX + currentCellSizeX, drawY + currentCellSizeY);
-                        ctx.stroke();
-                    }
-                    if (maze[y][x].walls.bottom) {
-                        ctx.beginPath();
-                        ctx.moveTo(drawX, drawY + currentCellSizeY);
-                        ctx.lineTo(drawX + currentCellSizeX, drawY + currentCellSizeY);
-                        ctx.stroke();
-                    }
-                    if (maze[y][x].walls.left) {
-                        ctx.beginPath();
-                        ctx.moveTo(drawX, drawY);
-                        ctx.lineTo(drawX, drawY + currentCellSizeY);
-                        ctx.stroke();
-                    }
-                }
-            }
-            drawEggs();
-            drawPlayer();
-        }
-
-         function drawEggs() {
             eggs.forEach(egg => {
                 const currentCellSizeX = canvas.width / cols;
                 const currentCellSizeY = canvas.height / rows;
@@ -577,24 +340,395 @@
             });
         }
 
-         function drawPlayer() {
-             const currentCellSizeX = canvas.width / cols;
-             const currentCellSizeY = canvas.height / rows;
+
+        function showMessage(text) {
+            gameMessage.textContent = text;
+            gameMessage.style.opacity = 1;
+            setTimeout(() => {
+                gameMessage.style.opacity = 0;
+            }, 2000);
+        }
+
+        function checkCollision(dx, dy) {
+            const cell = maze[player.y][player.x];
+            if (dx === 1 && cell.walls.right) return true;
+            if (dx === -1 && cell.walls.left) return true;
+            if (dy === 1 && cell.walls.bottom) return true;
+            if (dy === -1 && cell.walls.top) return true;
+            return false;
+        }
+
+        function movePlayer(dx, dy) {
+            if (checkCollision(dx, dy)) return;
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
+                player.x = newX;
+                player.y = newY;
+
+                // Check for easter egg
+                const egg = eggs.find(e => e.x === newX && e.y === newY);
+                if (egg) {
+                    showMessage(`Redirecting to ${egg.tooltip}...`);
+                    setTimeout(() => {
+                        window.location.href = egg.url;
+                    }, 1000);
+                }
+
+                render();
+            }
+        }
+
+        function handleMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+
+            if (mouseX < 0 || mouseY < 0 || mouseX >= canvas.width || mouseY >= canvas.height) {
+                tooltipMessage.style.display = 'none';
+                return;
+            }
+
+            const cellX = Math.floor(mouseX / (canvas.width / cols)); // Use scaled cell size
+            const cellY = Math.floor(mouseY / (canvas.height / rows)); // Use scaled cell size
+
+            const egg = eggs.find(e => e.x === cellX && e.y === cellY);
+
+            if (egg) {
+                tooltipMessage.textContent = egg.tooltip;
+                tooltipMessage.style.left = (e.clientX + 10) + 'px';
+                tooltipMessage.style.top = (e.clientY + 10) + 'px';
+                tooltipMessage.style.display = 'block';
+            } else {
+                tooltipMessage.style.display = 'none';
+            }
+        }
+
+        // --- Touch Event Handlers ---
+        canvas.addEventListener('touchstart', (e) => {
+            // Prevent default touch behavior like scrolling
+            e.preventDefault();
+            const touch = e.touches[0];
+            const rect = canvas.getBoundingClientRect();
+            touchStartX = touch.clientX - rect.left; // Store relative to canvas
+            touchStartY = touch.clientY - rect.top; // Store relative to canvas
+        }, { passive: false }); // Use passive: false to allow preventDefault
+
+        canvas.addEventListener('touchend', (e) => {
+            // Prevent default touch behavior
+            e.preventDefault();
+            // Use the last touch point
+            const touch = e.changedTouches[0];
+            const rect = canvas.getBoundingClientRect();
+            const touchEndX = touch.clientX - rect.left; // Store relative to canvas
+            const touchEndY = touch.clientY - rect.clientY; // Store relative to canvas
+
+
+            const dx = touchEndX - touchStartX;
+            const dy = touchEndY - touchStartY;
+
+            // Determine swipe direction based on the larger movement
+            if (Math.abs(dx) > Math.abs(dy)) {
+                // Horizontal swipe
+                if (Math.abs(dx) > swipeThreshold) {
+                    if (dx > 0) {
+                        movePlayer(1, 0); // Swipe right
+                    } else {
+                        movePlayer(-1, 0); // Swipe left
+                    }
+                }
+            } else {
+                // Vertical swipe
+                if (Math.abs(dy) > swipeThreshold) {
+                    if (dy > 0) {
+                        movePlayer(0, 1); // Swipe down
+                    } else {
+                        movePlayer(0, -1); // Swipe up
+                    }
+                }
+            }
+        }, { passive: false }); // Use passive: false to allow preventDefault
+
+        // Optional: Add touchmove if you want to track movement, though not strictly necessary for simple swipes
+        // canvas.addEventListener('touchmove', (e) => {
+        //     e.preventDefault(); // Prevent scrolling while touching the canvas
+        // }, { passive: false });
+
+
+        // --- Existing Event Listeners ---
+        document.addEventListener('keydown', (e) => {
+            switch (e.key) {
+                case 'ArrowUp':
+                case 'w':
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    movePlayer(1, 0);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    movePlayer(-1, 0);
+                    break;
+            }
+        });
+
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseout', () => {
+            tooltipMessage.style.display = 'none';
+        });
+
+        // Function to handle canvas resizing (for better mobile responsiveness)
+        function resizeCanvas() {
+            const containerWidth = canvas.parentElement.clientWidth;
+            const containerHeight = canvas.parentElement.clientHeight;
+            const size = Math.min(containerWidth, containerHeight); // Use the smaller dimension
+
+            // Set canvas size based on container, maintaining aspect ratio roughly
+            const aspectRatio = canvas.width / canvas.height;
+            let newWidth = size * 0.95;
+            let newHeight = newWidth / aspectRatio;
+
+            if (newHeight > containerHeight * 0.95) {
+                newHeight = containerHeight * 0.95;
+                newWidth = newHeight * aspectRatio;
+            }
+
+            canvas.width = newWidth;
+            canvas.height = newHeight;
+
+
+            render(); // Re-render the maze and player
+        }
+
+        // Add resize event listener
+        window.addEventListener('resize', resizeCanvas);
+
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            // Adjust drawing based on current canvas size and original cell size
+            const currentCellSizeX = canvas.width / cols;
+            const currentCellSizeY = canvas.height / rows;
+
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    // Adjust drawing coordinates and wall thickness based on current cell size
+                    const drawX = x * currentCellSizeX;
+                    const drawY = y * currentCellSizeY;
+                    const wallThickness = 2 * (currentCellSizeX / cellSize); // Scale wall thickness
+
+                    ctx.strokeStyle = '#fff';
+                    ctx.lineWidth = wallThickness;
+
+                    if (maze[y][x].walls.top) {
+                        ctx.beginPath();
+                        ctx.moveTo(drawX, drawY);
+                        ctx.lineTo(drawX + currentCellSizeX, drawY);
+                        ctx.stroke();
+                    }
+                    if (maze[y][x].walls.right) {
+                        ctx.beginPath();
+                        ctx.moveTo(drawX + currentCellSizeX, drawY);
+                        ctx.lineTo(drawX + currentCellSizeX, drawY + currentCellSizeY);
+                        ctx.stroke();
+                    }
+                    if (maze[y][x].walls.bottom) {
+                        ctx.beginPath();
+                        ctx.moveTo(drawX, drawY + currentCellSizeY);
+                        ctx.lineTo(drawX + currentCellSizeX, drawY + currentCellSizeY);
+                        ctx.stroke();
+                    }
+                    if (maze[y][x].walls.left) {
+                        ctx.beginPath();
+                        ctx.moveTo(drawX, drawY);
+                        ctx.lineTo(drawX, drawY + currentCellSizeY);
+                        ctx.stroke();
+                    }
+                }
+            }
+            drawEggs();
+            drawPlayer();
+        }
+
+        function drawEggs() {
+            eggs.forEach(egg => {
+                const currentCellSizeX = canvas.width / cols;
+                const currentCellSizeY = canvas.height / rows;
+                const eggX = egg.x * currentCellSizeX + currentCellSizeX / 2;
+                const eggY = egg.y * currentCellSizeY + currentCellSizeY / 2;
+
+                // Draw a background circle for the icon
+                ctx.beginPath();
+                ctx.arc(
+                    eggX,
+                    eggY,
+                    Math.min(currentCellSizeX, currentCellSizeY) / 3, // Scale circle size
+                    0, Math.PI * 2
+                );
+                ctx.fillStyle = 'gold';
+                ctx.fill();
+
+                // Draw the specific icon based on the 'icon' property
+                ctx.fillStyle = '#000'; // Color of the icon/text
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+
+                switch (egg.icon) {
+                    case 'linkedin':
+                        ctx.font = `${Math.min(currentCellSizeX, currentCellSizeY) / 2.5}px Arial`; // Scale font size
+                        ctx.fillText("in", eggX, eggY);
+                        break;
+                    case 'github':
+                        ctx.font = `${Math.min(currentCellSizeX, currentCellSizeY) / 2.5}px Arial`; // Scale font size
+                        ctx.fillText("Git", eggX, eggY);
+                        break;
+                    case 'profile':
+                        // Draw a simple profile icon (head and body)
+                        const headRadius = Math.min(currentCellSizeX, currentCellSizeY) / 6; // Scale head size
+                        const bodyWidth = Math.min(currentCellSizeX, currentCellSizeY) / 3; // Scale body size
+                        const bodyHeight = Math.min(currentCellSizeX, currentCellSizeY) / 6; // Scale body size
+
+                        // Head
+                        ctx.beginPath();
+                        ctx.arc(eggX, eggY - headRadius / 2, headRadius, 0, Math.PI * 2);
+                        ctx.fill();
+
+                        // Body (simple rectangle or rounded shape)
+                        ctx.beginPath();
+                        ctx.arc(eggX, eggY + bodyHeight / 2, bodyWidth / 2, 0, Math.PI, false); // Arc for shoulders
+                        ctx.lineTo(eggX + bodyWidth / 2, eggY + bodyHeight / 2);
+                        ctx.lineTo(eggX - bodyWidth / 2, eggY + bodyHeight / 2);
+                        ctx.closePath();
+                        ctx.fill();
+                        break;
+                    default:
+                        // Fallback to a simple dot or text if icon type is unknown
+                        ctx.font = `${Math.min(currentCellSizeX, currentCellSizeY) / 3}px Arial`; // Scale font size
+                        ctx.fillText("?", eggX, eggY);
+                }
+            });
+        }
+
+        function drawPlayer() {
+            const currentCellSizeX = canvas.width / cols;
+            const currentCellSizeY = canvas.height / rows;
             ctx.beginPath();
             ctx.arc(
-                player.x * currentCellSizeX + currentCellSizeX/2, // Scale player position
-                player.y * currentCellSizeY + currentCellSizeY/2, // Scale player position
-                Math.min(currentCellSizeX, currentCellSizeY)/3, // Scale player size
-                0, Math.PI*2
+                player.x * currentCellSizeX + currentCellSizeX / 2, // Scale player position
+                player.y * currentCellSizeY + currentCellSizeY / 2, // Scale player position
+                Math.min(currentCellSizeX, currentCellSizeY) / 3, // Scale player size
+                0, Math.PI * 2
             );
             ctx.fillStyle = '#00ffcc';
             ctx.fill();
         }
 
+        // Function to start the main game
+        function startGame() {
+            setupMaze();
+            resizeCanvas(); // Initial resize and render
+            canvas.style.opacity = 1; // Fade in the canvas
+            // Add event listeners after the game starts
+            document.addEventListener('keydown', (e) => {
+                switch (e.key) {
+                    case 'ArrowUp':
+                    case 'w':
+                        movePlayer(0, -1);
+                        break;
+                    case 'ArrowRight':
+                    case 'd':
+                        movePlayer(1, 0);
+                        break;
+                    case 'ArrowDown':
+                    case 's':
+                        movePlayer(0, 1);
+                        break;
+                    case 'ArrowLeft':
+                    case 'a':
+                        movePlayer(-1, 0);
+                        break;
+                }
+            });
 
-        // Initialize
-        setupMaze();
-        resizeCanvas(); // Call resizeCanvas initially
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseout', () => {
+                tooltipMessage.style.display = 'none';
+            });
+
+            // Add touch event listeners
+            canvas.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                const touch = e.touches[0];
+                const rect = canvas.getBoundingClientRect();
+                touchStartX = touch.clientX - rect.left;
+                touchStartY = touch.clientY - rect.top;
+            }, { passive: false });
+
+            canvas.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                const touch = e.changedTouches[0];
+                const rect = canvas.getBoundingClientRect();
+                const touchEndX = touch.clientX - rect.left;
+                const touchEndY = touch.clientY - rect.top; // Corrected touchEndY calculation
+
+                const dx = touchEndX - touchStartX;
+                const dy = touchEndY - touchStartY;
+
+                if (Math.abs(dx) > Math.abs(dy)) {
+                    if (Math.abs(dx) > swipeThreshold) {
+                        if (dx > 0) {
+                            movePlayer(1, 0);
+                        } else {
+                            movePlayer(-1, 0);
+                        }
+                    }
+                } else {
+                    if (Math.abs(dy) > swipeThreshold) {
+                        if (dy > 0) {
+                            movePlayer(0, 1);
+                        } else {
+                            movePlayer(0, -1);
+                        }
+                    }
+                }
+            }, { passive: false });
+        }
+
+        // Function to show messages sequentially
+        function showMessages() {
+            // Show first message
+            introMessage1.style.opacity = 1;
+            setTimeout(() => {
+                // Hide first message
+                introMessage1.style.opacity = 0;
+                setTimeout(() => {
+                    // Show second message
+                    introMessage2.style.opacity = 1;
+                    setTimeout(() => {
+                        // Hide second message
+                        introMessage2.style.opacity = 0;
+                        setTimeout(() => {
+                            // Start the game after messages fade out
+                            startGame();
+                        }, 1000); // Delay after second message fades out
+                    }, 2000); // Duration second message is visible
+                }, 1000); // Delay between messages
+            }, 2000); // Duration first message is visible
+        }
+
+
+        // Initialize by showing messages
+        window.onload = showMessages; // Call showMessages when the window loads
+
+        // Add resize event listener
+        window.addEventListener('resize', resizeCanvas);
+
     </script>
 </body>
+
 </html>
