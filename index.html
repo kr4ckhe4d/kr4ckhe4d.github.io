@@ -1,1 +1,343 @@
-<!doctype html><html lang="en"><head><meta charset="utf-8"/><link rel="icon" href="/favicon.ico"/><meta name="viewport" content="width=device-width,initial-scale=1"/><meta name="theme-color" content="#000000"/><meta name="description" content="Web site created using create-react-app"/><link rel="apple-touch-icon" href="/logo192.png"/><link rel="manifest" href="/manifest.json"/><title>React App</title><script defer="defer" src="/static/js/main.164bec2d.js"></script><link href="/static/css/main.207d25e6.css" rel="stylesheet"></head><body><noscript>You need to enable JavaScript to run this app.</noscript><div id="root"></div></body></html>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Immersive Maze Game</title>
+    <style>
+        body {
+            margin: 0;
+            background: #111;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            overflow: hidden;
+            position: relative;
+        }
+        canvas {
+            border: 4px solid #fff;
+            background: #222;
+        }
+        #gameMessage {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 10px 20px;
+            border: 1px solid white;
+            border-radius: 5px;
+            opacity: 0;
+            transition: opacity 0.5s;
+            z-index: 10;
+        }
+        #tooltipMessage {
+            position: absolute;
+            background: rgba(0,0,0,0.8);
+            color: white;
+            padding: 5px 10px;
+            border: 1px solid white;
+            border-radius: 3px;
+            pointer-events: none;
+            z-index: 10;
+            display: none;
+            white-space: nowrap;
+            font-size: 0.9em;
+        }
+    </style>
+</head>
+<body>
+    <canvas id="mazeCanvas" width="600" height="600"></canvas>
+    <div id="gameMessage"></div>
+    <div id="tooltipMessage"></div>
+    <script>
+        const canvas = document.getElementById('mazeCanvas');
+        const ctx = canvas.getContext('2d');
+        const gameMessage = document.getElementById('gameMessage');
+        const tooltipMessage = document.getElementById('tooltipMessage');
+        const cellSize = 40;
+        const cols = canvas.width / cellSize;
+        const rows = canvas.height / cellSize;
+        let maze = [];
+        let player = { x: 0, y: 0 };
+        let eggs = [];
+
+        class Cell {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.walls = { top: true, right: true, bottom: true, left: true };
+                this.visited = false;
+            }
+
+            draw() {
+                const x = this.x * cellSize;
+                const y = this.y * cellSize;
+                if (this.walls.top) drawLine(x, y, x + cellSize, y);
+                if (this.walls.right) drawLine(x + cellSize, y, x + cellSize, y + cellSize);
+                if (this.walls.bottom) drawLine(x, y + cellSize, x + cellSize, y + cellSize);
+                if (this.walls.left) drawLine(x, y, x, y + cellSize);
+            }
+
+            getNeighbors() {
+                const neighbors = [];
+                const directions = [
+                    { dx: 0, dy: -1, wall1: 'top', wall2: 'bottom' },
+                    { dx: 1, dy: 0, wall1: 'right', wall2: 'left' },
+                    { dx: 0, dy: 1, wall1: 'bottom', wall2: 'top' },
+                    { dx: -1, dy: 0, wall1: 'left', wall2: 'right' }
+                ];
+                
+                for (const dir of directions) {
+                    const nx = this.x + dir.dx;
+                    const ny = this.y + dir.dy;
+                    if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
+                        const neighbor = maze[ny][nx];
+                        if (!neighbor.visited) {
+                            neighbors.push({ cell: neighbor, wall1: dir.wall1, wall2: dir.wall2 });
+                        }
+                    }
+                }
+                return neighbors;
+            }
+        }
+
+        function drawLine(x1, y1, x2, y2) {
+            ctx.beginPath();
+            ctx.moveTo(x1, y1);
+            ctx.lineTo(x2, y2);
+            ctx.strokeStyle = '#fff';
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        function generateMaze(current) {
+            current.visited = true;
+            while (true) {
+                const neighbors = current.getNeighbors();
+                if (neighbors.length === 0) break;
+                const { cell, wall1, wall2 } = neighbors[Math.floor(Math.random() * neighbors.length)];
+                current.walls[wall1] = false;
+                cell.walls[wall2] = false;
+                generateMaze(cell);
+            }
+        }
+
+        function shuffleArray(array) {
+            for (let i = array.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [array[i], array[j]] = [array[j], array[i]];
+            }
+            return array;
+        }
+
+        function setupMaze() {
+            maze = [];
+            eggs = [];
+            for (let y = 0; y < rows; y++) {
+                maze[y] = [];
+                for (let x = 0; x < cols; x++) {
+                    maze[y][x] = new Cell(x, y);
+                }
+            }
+            generateMaze(maze[0][0]);
+            
+            // Find dead ends for easter eggs
+            const deadEnds = [];
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    const cell = maze[y][x];
+                    const closedWalls = Object.values(cell.walls).filter(w => w).length;
+                    if (closedWalls >= 3 && !(x === 0 && y === 0)) {
+                        deadEnds.push({x, y});
+                    }
+                }
+            }
+            
+            // Fallback positions for tricky corners
+            const fallbacks = [
+                {x: cols-2, y: 0}, {x: 0, y: rows-1}, 
+                {x: cols-1, y: 1}, {x: 1, y: rows-1},
+                {x: cols-2, y: rows-2}, {x: 1, y: 1}
+            ];
+            
+            // Combine dead ends and fallbacks
+            const candidates = [...deadEnds];
+            for (const pos of fallbacks) {
+                if (!deadEnds.some(p => p.x === pos.x && p.y === pos.y)) {
+                    candidates.push(pos);
+                }
+            }
+            
+            // Get 3 unique positions
+            const selected = [];
+            const seen = new Set();
+            for (const pos of candidates) {
+                const key = `${pos.x},${pos.y}`;
+                if (!seen.has(key) && !(pos.x === 0 && pos.y === 0)) {
+                    seen.add(key);
+                    selected.push(pos);
+                    if (selected.length >= 3) break;
+                }
+            }
+            
+            // Fill remaining if needed
+            let x = 1, y = 1;
+            while (selected.length < 3) {
+                const key = `${x},${y}`;
+                if (!(x === 0 && y === 0) && !seen.has(key)) {
+                    selected.push({x, y});
+                    seen.add(key);
+                }
+                x++;
+                if (x >= cols - 1) { x = 1; y++; }
+                if (y >= rows) y = 1;
+            }
+            
+            // Assign Easter egg data
+            const eggData = [
+                {tooltip: 'LinkedIn', url: 'https://linkedin.com'},
+                {tooltip: 'GitHub', url: 'https://github.com'},
+                {tooltip: 'About Me', url: 'https://about.me'}
+            ];
+            
+            eggs = selected.slice(0, 3).map((pos, i) => ({
+                ...pos,
+                tooltip: eggData[i].tooltip,
+                url: eggData[i].url
+            }));
+        }
+
+        function drawPlayer() {
+            ctx.beginPath();
+            ctx.arc(
+                player.x * cellSize + cellSize/2,
+                player.y * cellSize + cellSize/2,
+                cellSize/3,
+                0, Math.PI*2
+            );
+            ctx.fillStyle = '#00ffcc';
+            ctx.fill();
+        }
+
+        function drawEggs() {
+            eggs.forEach(egg => {
+                ctx.beginPath();
+                ctx.arc(
+                    egg.x * cellSize + cellSize / 2,
+                    egg.y * cellSize + cellSize / 2,
+                    cellSize / 4,
+                    0, Math.PI * 2
+                );
+                ctx.fillStyle = 'gold';
+                ctx.fill();
+            });
+        }
+
+        function showMessage(text) {
+            gameMessage.textContent = text;
+            gameMessage.style.opacity = 1;
+            setTimeout(() => {
+                gameMessage.style.opacity = 0;
+            }, 2000);
+        }
+
+        function checkCollision(dx, dy) {
+            const cell = maze[player.y][player.x];
+            if (dx === 1 && cell.walls.right) return true;
+            if (dx === -1 && cell.walls.left) return true;
+            if (dy === 1 && cell.walls.bottom) return true;
+            if (dy === -1 && cell.walls.top) return true;
+            return false;
+        }
+
+        function movePlayer(dx, dy) {
+            if (checkCollision(dx, dy)) return;
+            const newX = player.x + dx;
+            const newY = player.y + dy;
+            if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
+                player.x = newX;
+                player.y = newY;
+                
+                // Check for easter egg
+                const egg = eggs.find(e => e.x === newX && e.y === newY);
+                if (egg) {
+                    showMessage(`Redirecting to ${egg.tooltip}...`);
+                    setTimeout(() => {
+                        window.location.href = egg.url;
+                    }, 1000);
+                }
+                
+                render();
+            }
+        }
+
+        function handleMouseMove(e) {
+            const rect = canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            
+            if (mouseX < 0 || mouseY < 0 || mouseX >= canvas.width || mouseY >= canvas.height) {
+                tooltipMessage.style.display = 'none';
+                return;
+            }
+            
+            const cellX = Math.floor(mouseX / cellSize);
+            const cellY = Math.floor(mouseY / cellSize);
+            
+            const egg = eggs.find(e => e.x === cellX && e.y === cellY);
+            
+            if (egg) {
+                tooltipMessage.textContent = egg.tooltip;
+                tooltipMessage.style.left = (e.clientX + 10) + 'px';
+                tooltipMessage.style.top = (e.clientY + 10) + 'px';
+                tooltipMessage.style.display = 'block';
+            } else {
+                tooltipMessage.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('keydown', (e) => {
+            switch(e.key) {
+                case 'ArrowUp':
+                case 'w':
+                    movePlayer(0, -1);
+                    break;
+                case 'ArrowRight':
+                case 'd':
+                    movePlayer(1, 0);
+                    break;
+                case 'ArrowDown':
+                case 's':
+                    movePlayer(0, 1);
+                    break;
+                case 'ArrowLeft':
+                case 'a':
+                    movePlayer(-1, 0);
+                    break;
+            }
+        });
+
+        canvas.addEventListener('mousemove', handleMouseMove);
+        canvas.addEventListener('mouseout', () => {
+            tooltipMessage.style.display = 'none';
+        });
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                    maze[y][x].draw();
+                }
+            }
+            drawEggs();
+            drawPlayer();
+        }
+
+        // Initialize
+        setupMaze();
+        render();
+    </script>
+</body>
+</html>
