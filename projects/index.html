@@ -1,0 +1,722 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>3D City with Street Names</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111; color: #fff; }
+        canvas { display: block; }
+        #instructions {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            padding: 10px;
+            background-color: rgba(0,0,0,0.7);
+            border-radius: 8px;
+            font-size: 14px;
+            color: #eee;
+            z-index: 100;
+            max-width: 300px;
+        }
+        #instructions h2 { margin-top: 0; font-size: 16px; }
+        #instructions p { margin-bottom: 5px; }
+        #crosshair {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            width: 10px;
+            height: 10px;
+            border: 1px solid white;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            pointer-events: none; /* So it doesn't interfere with pointer lock */
+        }
+        #blocker {
+            position: absolute;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0,0,0,0.5);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+        #messageBox {
+            width: 300px;
+            padding: 20px;
+            background-color: #fff;
+            color: #333;
+            text-align: center;
+            border-radius: 10px;
+            box-shadow: 0 0 15px rgba(0,0,0,0.3);
+        }
+        #messageBox button {
+            padding: 10px 20px;
+            margin-top: 15px;
+            border: none;
+            background-color: #007bff;
+            color: white;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+        }
+        #messageBox button:hover {
+            background-color: #0056b3;
+        }
+    </style>
+
+    <script type="importmap">
+    {
+        "imports": {
+            "three": "https://cdn.jsdelivr.net/npm/three@0.164.1/build/three.module.js",
+            "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.164.1/examples/jsm/"
+        }
+    }
+    </script>
+
+</head>
+<body>
+    <div id="blocker">
+        <div id="messageBox">
+            <h2>Explore the City</h2>
+            <p>Click to look around with the mouse.</p>
+            <p>Use WASD keys to move.</p>
+            <p>Press SPACE to Jump.</p>
+            <button id="startButton">Start Exploring</button>
+        </div>
+    </div>
+
+    <div id="instructions">
+        <h2>Controls</h2>
+        <p><strong>Mouse:</strong> Look around</p>
+        <p><strong>W:</strong> Move Forward</p>
+        <p><strong>A:</strong> Strafe Left</p>
+        <p><strong>S:</strong> Move Backward</p>
+        <p><strong>D:</strong> Strafe Right</p>
+        <p><strong>Space:</strong> Jump</p>
+        <p><strong>ESC:</strong> Release mouse control</p>
+    </div>
+    <div id="crosshair" style="display: none;"></div>
+
+    <script type="module">
+        import * as THREE from 'three';
+        import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
+        import { FontLoader } from 'three/addons/loaders/FontLoader.js';
+        import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+
+        let scene, camera, renderer, controls;
+        let moveForward = false;
+        let moveBackward = false;
+        let moveLeft = false;
+        let moveRight = false;
+        let canJump = true;
+
+        const velocity = new THREE.Vector3();
+        const direction = new THREE.Vector3();
+        const clock = new THREE.Clock();
+
+        // Player parameters
+        const playerHeight = 10; 
+        const gravity = 30.0;
+        const jumpStrength = 150.0;
+        const playerMoveSpeed = 200.0;
+        const playerCollisionWidth = 1.5; 
+        const playerCollisionDepth = 1.5;
+
+
+        // City parameters
+        const buildingColors = [0x888888, 0xaaaaaa, 0xcccccc, 0x777777, 0x999999];
+        const shopColors = [0xff6666, 0x66ff66, 0x6666ff, 0xffff66, 0xff66ff];
+        const roadColor = 0x333333;
+        const groundColor = 0x55aa55; 
+        const carColors = [0xff0000, 0x0000ff, 0x00ff00, 0xffff00, 0xff00ff, 0x00ffff];
+
+        const roadWidth = 20;
+        const buildingSpacing = 5; 
+        const blockSize = 100; 
+        const numBlocks = 5; 
+
+        const actualCityRadius = numBlocks * (blockSize + roadWidth) + roadWidth / 2;
+        const citySize = actualCityRadius * 2; 
+
+        // Car parameters
+        const cars = [];
+        const numCars = 30; 
+        const carSpeedMin = 30;
+        const carSpeedMax = 70;
+
+        // Building storage for collisions
+        const buildings = [];
+
+        // Materials for building features
+        const doorMaterial = new THREE.MeshStandardMaterial({ color: 0x5C3A21, roughness: 0.8, metalness: 0.1 }); 
+        const windowMaterial = new THREE.MeshStandardMaterial({ color: 0x7CB9E8, roughness: 0.3, metalness: 0.2 }); 
+
+        // Materials and Geometries for Scenery
+        const treeTrunkMaterial = new THREE.MeshStandardMaterial({ color: 0x8B4513, roughness: 0.9 }); 
+        const treeFoliageMaterial = new THREE.MeshStandardMaterial({ color: 0x228B22, roughness: 0.8 }); 
+        const lampPostMaterial = new THREE.MeshStandardMaterial({ color: 0x606060, roughness: 0.6, metalness: 0.4 }); 
+        const lampLightMaterial = new THREE.MeshStandardMaterial({ color: 0xFFFF99, emissive: 0xFFFF99, emissiveIntensity: 1 }); 
+        const streetSignPoleMaterial = new THREE.MeshStandardMaterial({ color: 0x777777, roughness: 0.7 });
+        const streetSignBoardMaterial = new THREE.MeshStandardMaterial({ color: 0x006400, roughness: 0.8 }); 
+        let streetSignTextMaterial; 
+
+        let sharedTreeTrunkGeometry, sharedTreeFoliageGeometry;
+        let sharedLampPostGeometry, sharedLampLightGeometry;
+        let streetNameFont;
+
+        const ewStreetNames = ["Main St", "Oak Ave", "Elm Dr", "Cedar Ln", "Maple Rd", "Willow Way", "River Run", "Pine Pass", "Birch Blvd", "Aspen Cres", "Canyon Rd"];
+        const nsStreetNames = ["Park Ave", "Highland Dr", "Valley Rd", "Sunset Blvd", "Sunrise Ave", "Central St", "First St", "Second St", "Third Ave", "Fourth Way", "Fifth Pl"];
+
+
+        init();
+        animate();
+
+        function getPlayerCollider(centerPosition) {
+            const halfWidth = playerCollisionWidth / 2;
+            const halfDepth = playerCollisionDepth / 2;
+            const feetY = centerPosition.y - playerHeight; 
+            const headY = centerPosition.y; 
+
+            return new THREE.Box3(
+                new THREE.Vector3(centerPosition.x - halfWidth, feetY, centerPosition.z - halfDepth),
+                new THREE.Vector3(centerPosition.x + halfWidth, headY, centerPosition.z + halfDepth)
+            );
+        }
+
+
+        function init() {
+            scene = new THREE.Scene();
+            
+            const skyLoader = new THREE.CubeTextureLoader();
+            const skyTexture = skyLoader.load([
+                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Right_PX', 
+                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Left_NX',  
+                'https://placehold.co/1024x1024/81D4FA/01579B?text=Sky_Top_PY',   
+                'https://placehold.co/1024x1024/B0BEC5/37474F?text=Sky_Bottom_NY',
+                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Front_PZ',
+                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Back_NZ'  
+            ]);
+            scene.background = skyTexture;
+            scene.fog = new THREE.Fog(0xB3E5FC, 150, actualCityRadius * 1.4); 
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, citySize * 1.5); 
+
+            renderer = new THREE.WebGLRenderer({ antialias: true });
+            renderer.setSize(window.innerWidth, window.innerHeight);
+            renderer.shadowMap.enabled = true;
+            renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+            document.body.appendChild(renderer.domElement);
+
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+            scene.add(ambientLight);
+
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
+            directionalLight.position.set(actualCityRadius * 0.25, actualCityRadius * 0.4, actualCityRadius * 0.25); 
+            directionalLight.castShadow = true;
+            directionalLight.shadow.mapSize.width = 2048; 
+            directionalLight.shadow.mapSize.height = 2048; 
+            directionalLight.shadow.camera.near = 0.5;
+            directionalLight.shadow.camera.far = citySize; 
+            directionalLight.shadow.camera.left = -actualCityRadius * 1.1; 
+            directionalLight.shadow.camera.right = actualCityRadius* 1.1;
+            directionalLight.shadow.camera.top = actualCityRadius * 1.1;
+            directionalLight.shadow.camera.bottom = -actualCityRadius * 1.1;
+            scene.add(directionalLight);
+
+            const groundGeometry = new THREE.PlaneGeometry(citySize, citySize); 
+            const groundMaterial = new THREE.MeshStandardMaterial({ color: groundColor, roughness: 0.8, metalness: 0.2 });
+            const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+            ground.rotation.x = -Math.PI / 2;
+            ground.receiveShadow = true;
+            scene.add(ground);
+            
+            sharedTreeTrunkGeometry = new THREE.CylinderGeometry(1, 1.5, 12, 8); 
+            sharedTreeFoliageGeometry = new THREE.SphereGeometry(6, 8, 6); 
+            sharedLampPostGeometry = new THREE.CylinderGeometry(0.5, 0.75, 18, 8);
+            sharedLampLightGeometry = new THREE.BoxGeometry(1.5, 1.5, 1.5);
+
+            const fontLoader = new FontLoader();
+            fontLoader.load('https://cdn.jsdelivr.net/npm/three@0.164.1/examples/fonts/helvetiker_regular.typeface.json', function (font) {
+                streetNameFont = font;
+                streetSignTextMaterial = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 }); 
+                createStreetSigns(); 
+            });
+
+
+            createRoads();
+            createBuildings(); 
+            createCars();
+            createTrees();
+            createLampPosts();
+
+            controls = new PointerLockControls(camera, document.body);
+            controls.getObject().position.y = playerHeight; 
+            scene.add(controls.getObject());
+
+
+            const blocker = document.getElementById('blocker');
+            const startButton = document.getElementById('startButton');
+            const crosshair = document.getElementById('crosshair');
+
+            startButton.addEventListener('click', () => controls.lock());
+            controls.addEventListener('lock', () => {
+                blocker.style.display = 'none';
+                crosshair.style.display = 'block';
+            });
+            controls.addEventListener('unlock', () => {
+                blocker.style.display = 'flex';
+                crosshair.style.display = 'none';
+            });
+
+            document.addEventListener('keydown', onKeyDown);
+            document.addEventListener('keyup', onKeyUp);
+            window.addEventListener('resize', onWindowResize, false);
+        }
+
+        function createRoads() {
+            const roadMaterial = new THREE.MeshStandardMaterial({ color: roadColor, roughness: 0.9 });
+            const roadHeight = 0.2;
+            for (let i = -numBlocks; i <= numBlocks; i++) {
+                const roadLinePos = i * (blockSize + roadWidth) - roadWidth / 2;
+                
+                const roadZ = new THREE.Mesh(new THREE.BoxGeometry(roadWidth, roadHeight, citySize), roadMaterial);
+                roadZ.position.set(roadLinePos, roadHeight / 2, 0);
+                roadZ.castShadow = true; roadZ.receiveShadow = true;
+                scene.add(roadZ);
+
+                const roadX = new THREE.Mesh(new THREE.BoxGeometry(citySize, roadHeight, roadWidth), roadMaterial);
+                roadX.position.set(0, roadHeight / 2, roadLinePos);
+                roadX.castShadow = true; roadX.receiveShadow = true;
+                scene.add(roadX);
+            }
+        }
+        
+        function addBuildingFeatures(building, buildingScaledWidth, buildingScaledHeight, buildingScaledDepth, isShop) {
+            const doorBoxThickness = 0.2; 
+            const windowBoxThickness = 0.1;
+            const frontFaceZ = building.position.z + buildingScaledDepth / 2;
+
+            const doorHeight = Math.min(buildingScaledHeight * 0.25, playerHeight * 1.3); 
+            const doorWidth = buildingScaledWidth * 0.2;
+            if (buildingScaledHeight > doorHeight * 1.1) { 
+                const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorBoxThickness); 
+                const door = new THREE.Mesh(doorGeometry, doorMaterial);
+                door.position.set(building.position.x, building.position.y - buildingScaledHeight / 2 + doorHeight / 2, frontFaceZ + doorBoxThickness / 2 );
+                door.castShadow = false; door.receiveShadow = false; 
+                scene.add(door);
+            }
+
+            const windowSizeForZFace = Math.min(buildingScaledWidth * 0.12, buildingScaledHeight * 0.1); 
+            const windowSpacingZ = windowSizeForZFace * 1.8; 
+            let startWindowY_ZFace = building.position.y - buildingScaledHeight / 2 + ( (buildingScaledHeight > doorHeight * 1.1) ? doorHeight : 0 ) + windowSizeForZFace * 0.5;
+            let shopSignBottomEdge = -Infinity, shopSignTopEdge = -Infinity;
+            if (isShop) {
+                const shopSignHeight = Math.max(5, buildingScaledHeight * 0.1);
+                const shopSignCenterY = building.position.y - buildingScaledHeight / 2 + buildingScaledHeight * 0.7;
+                shopSignBottomEdge = shopSignCenterY - shopSignHeight / 2;
+                shopSignTopEdge = shopSignCenterY + shopSignHeight / 2;
+            }
+            const zFaceWindowGeometry = new THREE.BoxGeometry(windowSizeForZFace, windowSizeForZFace, windowBoxThickness);
+            for (let y = startWindowY_ZFace; y < building.position.y + buildingScaledHeight / 2 - windowSizeForZFace; y += windowSpacingZ) {
+                if (isShop && (Math.max(y, shopSignBottomEdge) < Math.min(y + windowSizeForZFace, shopSignTopEdge))) continue; 
+                for (let x = building.position.x - buildingScaledWidth / 2 + windowSizeForZFace * 0.5; x < building.position.x + buildingScaledWidth / 2 - windowSizeForZFace * 0.25; x += windowSpacingZ) {
+                    if (Math.random() > 0.15) { 
+                        const windowMesh = new THREE.Mesh(zFaceWindowGeometry, windowMaterial); 
+                        windowMesh.position.set(x, y, frontFaceZ + windowBoxThickness / 2);
+                        windowMesh.castShadow = false; windowMesh.receiveShadow = false; 
+                        scene.add(windowMesh);
+                    }
+                }
+            }
+
+            const sideFaceX = building.position.x + buildingScaledWidth / 2;
+            const windowSizeForXFace = Math.min(buildingScaledDepth * 0.12, buildingScaledHeight * 0.1); 
+            const windowSpacingX = windowSizeForXFace * 1.8;
+            let startWindowY_XFace = building.position.y - buildingScaledHeight / 2 + windowSizeForXFace * 0.5;
+            const xFaceWindowGeometry = new THREE.BoxGeometry(windowBoxThickness, windowSizeForXFace, windowSizeForXFace);
+            for (let y = startWindowY_XFace; y < building.position.y + buildingScaledHeight / 2 - windowSizeForXFace; y += windowSpacingX) {
+                for (let z = building.position.z - buildingScaledDepth / 2 + windowSizeForXFace * 0.5; z < building.position.z + buildingScaledDepth / 2 - windowSizeForXFace * 0.25; z += windowSpacingX) {
+                     if (Math.random() > 0.2) { 
+                        const windowMesh = new THREE.Mesh(xFaceWindowGeometry, windowMaterial); 
+                        windowMesh.position.set(sideFaceX + windowBoxThickness / 2, y, z);
+                        windowMesh.castShadow = false; windowMesh.receiveShadow = false; 
+                        scene.add(windowMesh);
+                    }
+                }
+            }
+        }
+
+        function createBuildings() {
+            const buildingBaseGeometry = new THREE.BoxGeometry(1, 1, 1); 
+            for (let i = -numBlocks; i < numBlocks; i++) { 
+                for (let j = -numBlocks; j < numBlocks; j++) { 
+                    const blockCenterX = i * (blockSize + roadWidth) + blockSize / 2;
+                    const blockCenterZ = j * (blockSize + roadWidth) + blockSize / 2;
+                    
+                    const buildingsPerBlock = Math.floor(Math.random() * 2) + 1; 
+                    for (let k = 0; k < buildingsPerBlock; k++) {
+                        const isShop = Math.random() < 0.2;
+                        const currentBuildingWidth = Math.random() * (blockSize / 2.5) + (blockSize / 5); 
+                        const currentBuildingDepth = Math.random() * (blockSize / 2.5) + (blockSize / 5);
+                        const currentBuildingHeight = isShop ? (Math.random() * 25 + 12) : (Math.random() * 80 + 30); 
+                        
+                        const buildingMaterial = new THREE.MeshStandardMaterial({
+                            color: isShop ? shopColors[Math.floor(Math.random() * shopColors.length)] : buildingColors[Math.floor(Math.random() * buildingColors.length)],
+                            roughness: 0.7, metalness: 0.1
+                        });
+                        const building = new THREE.Mesh(buildingBaseGeometry, buildingMaterial);
+                        building.scale.set(currentBuildingWidth, currentBuildingHeight, currentBuildingDepth);
+                        
+                        const offsetX = (Math.random() - 0.5) * (blockSize - currentBuildingWidth - buildingSpacing);
+                        const offsetZ = (Math.random() - 0.5) * (blockSize - currentBuildingDepth - buildingSpacing);
+                        building.position.set(blockCenterX + offsetX, currentBuildingHeight / 2, blockCenterZ + offsetZ);
+                        building.castShadow = true; 
+                        building.receiveShadow = true; 
+                        scene.add(building);
+
+                        building.updateMatrixWorld(); 
+                        const buildingBox = new THREE.Box3().setFromObject(building);
+                        buildings.push({ mesh: building, boundingBox: buildingBox });
+
+                        addBuildingFeatures(building, currentBuildingWidth, currentBuildingHeight, currentBuildingDepth, isShop);
+
+                        if (isShop) {
+                            const signVisualHeight = Math.max(5, currentBuildingHeight * 0.1); 
+                            const signVisualDepth = 2; 
+                            const signVisualWidth = currentBuildingWidth * 0.8;
+                            const signGeometry = new THREE.BoxGeometry(signVisualWidth, signVisualHeight, signVisualDepth);
+                            const signMaterial = new THREE.MeshStandardMaterial({ color: 0xeeeeee });
+                            const sign = new THREE.Mesh(signGeometry, signMaterial);
+                            sign.position.set(building.position.x, building.position.y - currentBuildingHeight / 2 + currentBuildingHeight * 0.7, building.position.z + currentBuildingDepth / 2 + signVisualDepth / 2 );
+                            sign.castShadow = true; 
+                            scene.add(sign);
+                        }
+                    }
+                }
+            }
+        }
+
+        function createCars() {
+            const carGeometry = new THREE.BoxGeometry(8, 4, 15); 
+            for (let i = 0; i < numCars; i++) {
+                const carMaterial = new THREE.MeshStandardMaterial({ color: carColors[Math.floor(Math.random() * carColors.length)], roughness: 0.4, metalness: 0.2 });
+                const carMesh = new THREE.Mesh(carGeometry, carMaterial); 
+                carMesh.castShadow = true; 
+                carMesh.receiveShadow = true;
+                const car = { mesh: carMesh, speed: Math.random() * (carSpeedMax - carSpeedMin) + carSpeedMin, axis: Math.random() > 0.5 ? 'x' : 'z', direction: Math.random() > 0.5 ? 1 : -1, };
+                const randomRoadIndex = Math.floor(Math.random() * (2 * numBlocks + 1)) - numBlocks;
+                const roadLinePos = randomRoadIndex * (blockSize + roadWidth) - roadWidth / 2;
+                const carYPosition = 0.2 / 2 + 4 / 2; 
+                if (car.axis === 'x') { 
+                    car.mesh.position.set((Math.random() - 0.5) * citySize, carYPosition, roadLinePos + (Math.random() > 0.5 ? roadWidth / 4 : -roadWidth / 4));
+                    if (carGeometry.parameters.depth > carGeometry.parameters.width) car.mesh.rotation.y = Math.PI / 2;
+                } else { 
+                    car.mesh.position.set(roadLinePos + (Math.random() > 0.5 ? roadWidth / 4 : -roadWidth / 4), carYPosition, (Math.random() - 0.5) * citySize);
+                }
+                cars.push(car); scene.add(car.mesh);
+            }
+        }
+
+        function placeTree(x, z) {
+            const trunk = new THREE.Mesh(sharedTreeTrunkGeometry, treeTrunkMaterial);
+            trunk.position.set(x, 6, z); 
+            trunk.castShadow = true;
+            trunk.receiveShadow = true;
+            scene.add(trunk);
+
+            const foliage = new THREE.Mesh(sharedTreeFoliageGeometry, treeFoliageMaterial);
+            foliage.position.set(x, 12 + 5, z); 
+            foliage.castShadow = true;
+            foliage.receiveShadow = true;
+            scene.add(foliage);
+        }
+
+        function createTrees() {
+            const treesPerBlockLength = 2; 
+            const treeOffsetFromRoadCenter = roadWidth / 2 + 10; 
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
+                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) { 
+                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2; 
+                    const treeSpacing = blockSize / (treesPerBlockLength + 1); 
+                    for (let k = 1; k <= treesPerBlockLength; k++) { 
+                        const xPos = blockXStart + k * treeSpacing; 
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) { 
+                             placeTree(xPos, roadZCenter + treeOffsetFromRoadCenter);
+                             placeTree(xPos, roadZCenter - treeOffsetFromRoadCenter);
+                        }
+                    }
+                }
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
+                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) { 
+                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2; 
+                    const treeSpacing = blockSize / (treesPerBlockLength + 1);
+                    for (let k = 1; k <= treesPerBlockLength; k++) { 
+                        const zPos = blockZStart + k * treeSpacing; 
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) { 
+                            placeTree(roadXCenter + treeOffsetFromRoadCenter, zPos);
+                            placeTree(roadXCenter - treeOffsetFromRoadCenter, zPos);
+                        }
+                    }
+                }
+            }
+        }
+
+        function placeLampPost(x, z) {
+            const post = new THREE.Mesh(sharedLampPostGeometry, lampPostMaterial);
+            post.position.set(x, 9, z); 
+            post.castShadow = true;
+            post.receiveShadow = true;
+            scene.add(post);
+
+            const light = new THREE.Mesh(sharedLampLightGeometry, lampLightMaterial);
+            light.position.set(x, 18 + 0.75, z); 
+            light.castShadow = false; 
+            light.receiveShadow = false;
+            scene.add(light);
+        }
+
+        function createLampPosts() {
+            const lampsPerBlockLength = 1; 
+            const lampOffsetFromRoadCenter = roadWidth / 2 + 4; 
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
+                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) { 
+                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const lampSpacing = blockSize / (lampsPerBlockLength + 1); 
+                    for (let k = 1; k <= lampsPerBlockLength; k++) {
+                        const xPos = blockXStart + k * lampSpacing; 
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) { 
+                             placeLampPost(xPos, roadZCenter + lampOffsetFromRoadCenter);
+                             placeLampPost(xPos, roadZCenter - lampOffsetFromRoadCenter);
+                        }
+                    }
+                }
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
+                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) { 
+                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const lampSpacing = blockSize / (lampsPerBlockLength + 1);
+                    for (let k = 1; k <= lampsPerBlockLength; k++) {
+                        const zPos = blockZStart + k * lampSpacing; 
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) { 
+                            placeLampPost(roadXCenter + lampOffsetFromRoadCenter, zPos);
+                            placeLampPost(roadXCenter - lampOffsetFromRoadCenter, zPos);
+                        }
+                    }
+                }
+            }
+        }
+
+        function createStreetSigns() {
+            if (!streetNameFont || !streetSignTextMaterial) {
+                console.warn("Street sign font or material not loaded yet.");
+                return;
+            }
+
+            const signPostHeight = playerHeight + 5; 
+            const signBoardHeight = 3;
+            const signBoardWidth = 20;
+            const signBoardDepth = 0.3;
+            const textDepth = 0.1;
+            const textSize = 1.2;
+            const signPostRadius = 0.25;
+            // Offset to place the sign post on a corner of the intersection's sidewalk area
+            const signOffsetFromIntersectionCorner = roadWidth / 2 + 3; 
+
+            const signPostGeometry = new THREE.CylinderGeometry(signPostRadius, signPostRadius, signPostHeight, 8);
+            const signBoardGeometry = new THREE.BoxGeometry(signBoardWidth, signBoardHeight, signBoardDepth);
+
+            // Iterate through all intersections
+            for (let i = -numBlocks; i <= numBlocks; i++) { // EW road index (defines roadZ)
+                const roadZ = i * (blockSize + roadWidth) - roadWidth / 2; // Centerline Z of the EW road
+                const ewStreetName = ewStreetNames[(i + numBlocks) % ewStreetNames.length];
+
+                for (let j = -numBlocks; j <= numBlocks; j++) { // NS road index (defines roadX)
+                    const roadX = j * (blockSize + roadWidth) - roadWidth / 2; // Centerline X of the NS road
+                    const nsStreetName = nsStreetNames[(j + numBlocks) % nsStreetNames.length];
+
+                    // --- Create sign for the EW Street at this intersection (roadX, roadZ) ---
+                    // Placed on the South-East corner of the intersection (relative to intersection center)
+                    const ewTextGeom = new TextGeometry(ewStreetName, { font: streetNameFont, size: textSize, height: textDepth, curveSegments: 2 });
+                    ewTextGeom.computeBoundingBox();
+                    const ewTextWidth = ewTextGeom.boundingBox.max.x - ewTextGeom.boundingBox.min.x;
+
+                    const ewSignGroup = new THREE.Group();
+                    const ewPost = new THREE.Mesh(signPostGeometry.clone(), streetSignPoleMaterial);
+                    ewPost.position.y = signPostHeight / 2;
+                    const ewBoard = new THREE.Mesh(signBoardGeometry.clone(), streetSignBoardMaterial);
+                    ewBoard.position.y = signPostHeight - signBoardHeight / 2 - 0.5; 
+                    const ewTextMesh = new THREE.Mesh(ewTextGeom, streetSignTextMaterial); 
+                    ewTextMesh.position.set(-ewTextWidth / 2, ewBoard.position.y - textSize * 0.4, signBoardDepth / 2 + textDepth * 0.1);
+                    
+                    ewSignGroup.add(ewPost, ewBoard, ewTextMesh);
+                    ewSignGroup.position.set(roadX + signOffsetFromIntersectionCorner, 0, roadZ - signOffsetFromIntersectionCorner);
+                    ewSignGroup.rotation.y = Math.PI / 2; // Board parallel to X-axis (its length along global Z). Text on its +Z local face, now global +X.
+                    // To make text face North (towards roadZ, which is the EW road itself):
+                    // No additional rotation for textMesh needed if sign is on South side of EW road facing North.
+                    scene.add(ewSignGroup);
+
+
+                    // --- Create sign for the NS Street at this intersection (roadX, roadZ) ---
+                    // Placed on the North-West corner of the intersection
+                    const nsTextGeom = new TextGeometry(nsStreetName, { font: streetNameFont, size: textSize, height: textDepth, curveSegments: 2 });
+                    nsTextGeom.computeBoundingBox();
+                    const nsTextWidth = nsTextGeom.boundingBox.max.x - nsTextGeom.boundingBox.min.x;
+
+                    const nsSignGroup = new THREE.Group();
+                    const nsPost = new THREE.Mesh(signPostGeometry.clone(), streetSignPoleMaterial);
+                    nsPost.position.y = signPostHeight / 2;
+                    const nsBoard = new THREE.Mesh(signBoardGeometry.clone(), streetSignBoardMaterial);
+                    nsBoard.position.y = signPostHeight - signBoardHeight / 2 - 0.5;
+                    const nsTextMesh = new THREE.Mesh(nsTextGeom, streetSignTextMaterial);
+                    nsTextMesh.position.set(-nsTextWidth / 2, nsBoard.position.y - textSize * 0.4, signBoardDepth / 2 + textDepth * 0.1);
+
+                    nsSignGroup.add(nsPost, nsBoard, nsTextMesh);
+                    nsSignGroup.position.set(roadX - signOffsetFromIntersectionCorner, 0, roadZ + signOffsetFromIntersectionCorner);
+                    // nsSignGroup.rotation.y = 0; // Board parallel to Z-axis (its length along global X). Text on its +Z local face, now global +Z.
+                    // To make text face East (towards roadX, which is the NS road itself):
+                    // No additional rotation for textMesh needed if sign is on West side of NS road facing East.
+                    scene.add(nsSignGroup);
+                }
+            }
+        }
+
+
+        function onKeyDown(event) {
+            switch (event.code) {
+                case 'ArrowUp': case 'KeyW': moveForward = true; break;
+                case 'ArrowLeft': case 'KeyA': moveLeft = true; break;
+                case 'ArrowDown': case 'KeyS': moveBackward = true; break;
+                case 'ArrowRight': case 'KeyD': moveRight = true; break;
+                case 'Space': if (canJump) velocity.y += jumpStrength; canJump = false; break;
+            }
+        }
+
+        function onKeyUp(event) {
+            switch (event.code) {
+                case 'ArrowUp': case 'KeyW': moveForward = false; break;
+                case 'ArrowLeft': case 'KeyA': moveLeft = false; break;
+                case 'ArrowDown': case 'KeyS': moveBackward = false; break;
+                case 'ArrowRight': case 'KeyD': moveRight = false; break;
+            }
+        }
+
+        function onWindowResize() {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        }
+
+        function animate() {
+            requestAnimationFrame(animate);
+            const delta = clock.getDelta();
+            const playerObject = controls.getObject();
+            const prevPosition = playerObject.position.clone(); 
+
+            if (controls.isLocked) {
+                velocity.x -= velocity.x * 10.0 * delta;
+                velocity.z -= velocity.z * 10.0 * delta;
+                velocity.y -= gravity * 5.0 * delta;
+
+                direction.z = Number(moveForward) - Number(moveBackward); 
+                direction.x = Number(moveRight) - Number(moveLeft);     
+                direction.normalize(); 
+
+                const intendedDisplacementX = direction.x * playerMoveSpeed * delta;
+                const intendedDisplacementZ = direction.z * playerMoveSpeed * delta;
+
+                if (moveLeft || moveRight) controls.moveRight(intendedDisplacementX);
+                if (moveForward || moveBackward) controls.moveForward(intendedDisplacementZ);
+
+                playerObject.position.y += velocity.y * delta;
+
+                let onSolidSurface = false; 
+                let yCollisionResolvedThisLoop = false; 
+
+                for (const building of buildings) {
+                    const buildingBox = building.boundingBox;
+                    let playerCollider = getPlayerCollider(playerObject.position); 
+
+                    if (playerCollider.intersectsBox(buildingBox)) {
+                        yCollisionResolvedThisLoop = false;
+                        const prevFeetY = prevPosition.y - playerHeight;
+                        const currentFeetY = playerObject.position.y - playerHeight; 
+
+                        const landedOnThisBuilding = velocity.y <= 0 && prevFeetY >= buildingBox.max.y - 0.25 && currentFeetY <= buildingBox.max.y + 0.25;
+                        const hitHeadOnThisBuilding = velocity.y > 0 && prevPosition.y <= buildingBox.min.y + 0.25 && playerObject.position.y >= buildingBox.min.y - 0.25;
+
+                        if (landedOnThisBuilding) {
+                            playerObject.position.y = buildingBox.max.y + playerHeight;
+                            velocity.y = 0;
+                            canJump = true;
+                            onSolidSurface = true;
+                            yCollisionResolvedThisLoop = true;
+                        } else if (hitHeadOnThisBuilding) {
+                            playerObject.position.y = buildingBox.min.y; 
+                            velocity.y = 0;
+                            yCollisionResolvedThisLoop = true;
+                        }
+                        
+                        playerCollider = getPlayerCollider(playerObject.position);
+                        if (yCollisionResolvedThisLoop && !playerCollider.intersectsBox(buildingBox)) {
+                             if(onSolidSurface) break; 
+                             continue; 
+                        }
+                        
+                        if (playerCollider.intersectsBox(buildingBox) && !yCollisionResolvedThisLoop) {
+                            playerObject.position.x = prevPosition.x;
+                            playerObject.position.z = prevPosition.z;
+                            velocity.x = 0; 
+                            velocity.z = 0; 
+
+                            playerCollider = getPlayerCollider(playerObject.position); 
+                            if (playerCollider.intersectsBox(buildingBox)) {
+                                const feetAtRevertedXZ = playerObject.position.y - playerHeight;
+                                if (velocity.y <= 0 && feetAtRevertedXZ <= buildingBox.max.y + 0.25 && feetAtRevertedXZ >= buildingBox.max.y - playerHeight * 0.5) {
+                                    playerObject.position.y = buildingBox.max.y + playerHeight;
+                                    velocity.y = 0;
+                                    canJump = true;
+                                    onSolidSurface = true;
+                                } else if (!landedOnThisBuilding && !hitHeadOnThisBuilding) {
+                                    playerObject.position.y = prevPosition.y;
+                                    velocity.y = 0; 
+                                }
+                            }
+                        }
+                        if (onSolidSurface) break; 
+                    }
+                }
+
+                if (!onSolidSurface && playerObject.position.y < playerHeight) {
+                    playerObject.position.y = playerHeight;
+                    velocity.y = 0;
+                    canJump = true;
+                }
+            } 
+
+            cars.forEach(car => {
+                if (car.axis === 'x') {
+                    car.mesh.position.x += car.speed * car.direction * delta;
+                    if (car.mesh.position.x > actualCityRadius + 50) car.mesh.position.x = -actualCityRadius - 50;
+                    if (car.mesh.position.x < -actualCityRadius - 50) car.mesh.position.x = actualCityRadius + 50;
+                } else {
+                    car.mesh.position.z += car.speed * car.direction * delta;
+                    if (car.mesh.position.z > actualCityRadius + 50) car.mesh.position.z = -actualCityRadius - 50;
+                    if (car.mesh.position.z < -actualCityRadius - 50) car.mesh.position.z = actualCityRadius + 50;
+                }
+            });
+
+            renderer.render(scene, camera);
+        }
+    </script>
+</body>
+</html>
