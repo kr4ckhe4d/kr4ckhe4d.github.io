@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D City with Street Names</title>
+    <title>3D City with Procedural Sky</title>
     <style>
         body { margin: 0; overflow: hidden; font-family: 'Inter', sans-serif; background-color: #111; color: #fff; }
         canvas { display: block; }
@@ -103,8 +103,9 @@
         import { PointerLockControls } from 'three/addons/controls/PointerLockControls.js';
         import { FontLoader } from 'three/addons/loaders/FontLoader.js';
         import { TextGeometry } from 'three/addons/geometries/TextGeometry.js';
+        import { Sky } from 'three/addons/objects/Sky.js'; // Import Sky
 
-        let scene, camera, renderer, controls;
+        let scene, camera, renderer, controls, sky, sun;
         let moveForward = false;
         let moveBackward = false;
         let moveLeft = false;
@@ -187,41 +188,72 @@
 
         function init() {
             scene = new THREE.Scene();
+            // scene.background is now handled by the Sky object itself
             
-            const skyLoader = new THREE.CubeTextureLoader();
-            const skyTexture = skyLoader.load([
-                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Right_PX', 
-                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Left_NX',  
-                'https://placehold.co/1024x1024/81D4FA/01579B?text=Sky_Top_PY',   
-                'https://placehold.co/1024x1024/B0BEC5/37474F?text=Sky_Bottom_NY',
-                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Front_PZ',
-                'https://placehold.co/1024x1024/B3E5FC/0277BD?text=Sky_Back_NZ'  
-            ]);
-            scene.background = skyTexture;
-            scene.fog = new THREE.Fog(0xB3E5FC, 150, actualCityRadius * 1.4); 
+            // Initialize Sky
+            sky = new Sky();
+            sky.scale.setScalar(citySize * 2); // Make sky dome very large
+            scene.add(sky);
 
-            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, citySize * 1.5); 
+            sun = new THREE.Vector3(); // Sun position vector for Sky shader
+
+            // Sky shader parameters
+            const effectController = {
+                turbidity: 10,
+                rayleigh: 2, // Lower for less blue, higher for more intense blue
+                mieCoefficient: 0.005,
+                mieDirectionalG: 0.8,
+                elevation: 6, // Sun elevation in degrees (0 is horizon, 90 is directly overhead)
+                azimuth: 180, // Sun azimuth in degrees (horizontal direction)
+                // exposure: renderer.toneMappingExposure // This would be set if using tone mapping
+            };
+
+            const uniforms = sky.material.uniforms;
+            uniforms['turbidity'].value = effectController.turbidity;
+            uniforms['rayleigh'].value = effectController.rayleigh;
+            uniforms['mieCoefficient'].value = effectController.mieCoefficient;
+            uniforms['mieDirectionalG'].value = effectController.mieDirectionalG;
+
+            const phi = THREE.MathUtils.degToRad(90 - effectController.elevation);
+            const theta = THREE.MathUtils.degToRad(effectController.azimuth);
+            sun.setFromSphericalCoords(1, phi, theta); // Distance 1, as it's a direction
+            uniforms['sunPosition'].value.copy(sun);
+
+            // Fog - Adjust color to blend with the sky
+            // The fog color should ideally match the horizon color of the procedural sky.
+            // This might require some trial and error or a more dynamic approach.
+            // For now, a light blue that's less saturated than the previous one.
+            scene.fog = new THREE.Fog(0xA0C0E0, 150, actualCityRadius * 1.4); 
+
+
+            camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, citySize * 2); // Increased far plane for sky
 
             renderer = new THREE.WebGLRenderer({ antialias: true });
             renderer.setSize(window.innerWidth, window.innerHeight);
             renderer.shadowMap.enabled = true;
             renderer.shadowMap.type = THREE.PCFSoftShadowMap; 
+            // renderer.toneMapping = THREE.ACESFilmicToneMapping; // Optional: for better color grading with Sky
+            // renderer.toneMappingExposure = 0.5; // Adjust exposure if tone mapping is used
             document.body.appendChild(renderer.domElement);
 
-            const ambientLight = new THREE.AmbientLight(0xffffff, 0.8); 
+            const ambientLight = new THREE.AmbientLight(0xffffff, 0.6); // Adjusted ambient light
             scene.add(ambientLight);
 
-            const directionalLight = new THREE.DirectionalLight(0xffffff, 0.9);
-            directionalLight.position.set(actualCityRadius * 0.25, actualCityRadius * 0.4, actualCityRadius * 0.25); 
+            const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0); // Slightly adjusted intensity
+            // Align directional light with the sun position from the sky shader for consistency
+            directionalLight.position.set(sun.x, sun.y, sun.z).multiplyScalar(actualCityRadius * 0.5); // Scale sun direction to a position
+            directionalLight.target.position.set(0,0,0); // Ensure light points towards origin
+            scene.add(directionalLight.target);
+
             directionalLight.castShadow = true;
             directionalLight.shadow.mapSize.width = 2048; 
             directionalLight.shadow.mapSize.height = 2048; 
             directionalLight.shadow.camera.near = 0.5;
-            directionalLight.shadow.camera.far = citySize; 
-            directionalLight.shadow.camera.left = -actualCityRadius * 1.1; 
-            directionalLight.shadow.camera.right = actualCityRadius* 1.1;
-            directionalLight.shadow.camera.top = actualCityRadius * 1.1;
-            directionalLight.shadow.camera.bottom = -actualCityRadius * 1.1;
+            directionalLight.shadow.camera.far = citySize * 1.5; // Adjusted shadow camera far plane
+            directionalLight.shadow.camera.left = -actualCityRadius * 1.2; 
+            directionalLight.shadow.camera.right = actualCityRadius* 1.2;
+            directionalLight.shadow.camera.top = actualCityRadius * 1.2;
+            directionalLight.shadow.camera.bottom = -actualCityRadius * 1.2;
             scene.add(directionalLight);
 
             const groundGeometry = new THREE.PlaneGeometry(citySize, citySize); 
@@ -529,23 +561,19 @@
             const textDepth = 0.1;
             const textSize = 1.2;
             const signPostRadius = 0.25;
-            // Offset to place the sign post on a corner of the intersection's sidewalk area
             const signOffsetFromIntersectionCorner = roadWidth / 2 + 3; 
 
             const signPostGeometry = new THREE.CylinderGeometry(signPostRadius, signPostRadius, signPostHeight, 8);
             const signBoardGeometry = new THREE.BoxGeometry(signBoardWidth, signBoardHeight, signBoardDepth);
 
-            // Iterate through all intersections
-            for (let i = -numBlocks; i <= numBlocks; i++) { // EW road index (defines roadZ)
-                const roadZ = i * (blockSize + roadWidth) - roadWidth / 2; // Centerline Z of the EW road
+            for (let i = -numBlocks; i <= numBlocks; i++) { 
+                const roadZ = i * (blockSize + roadWidth) - roadWidth / 2; 
                 const ewStreetName = ewStreetNames[(i + numBlocks) % ewStreetNames.length];
 
-                for (let j = -numBlocks; j <= numBlocks; j++) { // NS road index (defines roadX)
-                    const roadX = j * (blockSize + roadWidth) - roadWidth / 2; // Centerline X of the NS road
+                for (let j = -numBlocks; j <= numBlocks; j++) { 
+                    const roadX = j * (blockSize + roadWidth) - roadWidth / 2; 
                     const nsStreetName = nsStreetNames[(j + numBlocks) % nsStreetNames.length];
 
-                    // --- Create sign for the EW Street at this intersection (roadX, roadZ) ---
-                    // Placed on the South-East corner of the intersection (relative to intersection center)
                     const ewTextGeom = new TextGeometry(ewStreetName, { font: streetNameFont, size: textSize, height: textDepth, curveSegments: 2 });
                     ewTextGeom.computeBoundingBox();
                     const ewTextWidth = ewTextGeom.boundingBox.max.x - ewTextGeom.boundingBox.min.x;
@@ -560,14 +588,10 @@
                     
                     ewSignGroup.add(ewPost, ewBoard, ewTextMesh);
                     ewSignGroup.position.set(roadX + signOffsetFromIntersectionCorner, 0, roadZ - signOffsetFromIntersectionCorner);
-                    ewSignGroup.rotation.y = Math.PI / 2; // Board parallel to X-axis (its length along global Z). Text on its +Z local face, now global +X.
-                    // To make text face North (towards roadZ, which is the EW road itself):
-                    // No additional rotation for textMesh needed if sign is on South side of EW road facing North.
+                    ewSignGroup.rotation.y = Math.PI / 2; 
                     scene.add(ewSignGroup);
 
 
-                    // --- Create sign for the NS Street at this intersection (roadX, roadZ) ---
-                    // Placed on the North-West corner of the intersection
                     const nsTextGeom = new TextGeometry(nsStreetName, { font: streetNameFont, size: textSize, height: textDepth, curveSegments: 2 });
                     nsTextGeom.computeBoundingBox();
                     const nsTextWidth = nsTextGeom.boundingBox.max.x - nsTextGeom.boundingBox.min.x;
@@ -582,9 +606,6 @@
 
                     nsSignGroup.add(nsPost, nsBoard, nsTextMesh);
                     nsSignGroup.position.set(roadX - signOffsetFromIntersectionCorner, 0, roadZ + signOffsetFromIntersectionCorner);
-                    // nsSignGroup.rotation.y = 0; // Board parallel to Z-axis (its length along global X). Text on its +Z local face, now global +Z.
-                    // To make text face East (towards roadX, which is the NS road itself):
-                    // No additional rotation for textMesh needed if sign is on West side of NS road facing East.
                     scene.add(nsSignGroup);
                 }
             }
