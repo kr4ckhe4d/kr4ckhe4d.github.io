@@ -162,26 +162,29 @@
     <div id="gameMessage"></div>
 
     <script>
-        const canvas = document.getElementById('mazeCanvas');
-        const ctx = canvas.getContext('2d');
-        const gameMessage = document.getElementById('gameMessage');
-        const tooltipMessage = document.getElementById('tooltipMessage');
-        const introMessage1 = document.getElementById('introMessage1');
-        const introMessage2 = document.getElementById('introMessage2');
-        const gameContainer = document.querySelector('.game-container');
+        const MazeGame = {};
 
-        let cols = 15; // Fixed number of columns
-        let rows = 15; // Fixed number of rows
+        MazeGame.canvas = document.getElementById('mazeCanvas');
+        MazeGame.ctx = MazeGame.canvas.getContext('2d');
+        MazeGame.gameMessage = document.getElementById('gameMessage');
+        MazeGame.tooltipMessage = document.getElementById('tooltipMessage');
+        MazeGame.introMessage1 = document.getElementById('introMessage1');
+        MazeGame.introMessage2 = document.getElementById('introMessage2');
+        MazeGame.gameContainer = document.querySelector('.game-container');
 
-        let maze = [];
-        let player = { x: 0, y: 0 };
-        let eggs = [];
+        MazeGame.cols = 15; // Fixed number of columns
+        MazeGame.rows = 15; // Fixed number of rows
 
-        let touchStartX = 0;
-        let touchStartY = 0;
-        const swipeThreshold = 30; // Modern threshold
+        MazeGame.maze = [];
+        MazeGame.player = { x: 0, y: 0 };
+        MazeGame.eggs = [];
 
-        class Cell {
+        MazeGame.touchStartX = 0;
+        MazeGame.touchStartY = 0;
+        MazeGame.swipeThreshold = 30; // Modern threshold
+        MazeGame.gameActive = false;
+
+        MazeGame.Cell = class Cell {
             constructor(x, y) {
                 this.x = x;
                 this.y = y;
@@ -200,8 +203,8 @@
                 for (const dir of directions) {
                     const nx = this.x + dir.dx;
                     const ny = this.y + dir.dy;
-                    if (nx >= 0 && ny >= 0 && nx < cols && ny < rows) {
-                        const neighbor = maze[ny][nx];
+                    if (nx >= 0 && ny >= 0 && nx < MazeGame.cols && ny < MazeGame.rows) {
+                        const neighbor = MazeGame.maze[ny][nx];
                         if (neighbor && !neighbor.visited) {
                             neighbors.push({ cell: neighbor, wall1: dir.wall1, wall2: dir.wall2 });
                         }
@@ -211,7 +214,7 @@
             }
         }
 
-        function generateMaze(current) {
+        MazeGame.generateMaze = function(current) {
             current.visited = true;
             let S = [];
             S.push(current);
@@ -230,27 +233,27 @@
             }
         }
 
-        function setupMaze() {
-            maze = [];
-            eggs = [];
-            for (let y = 0; y < rows; y++) {
-                maze[y] = [];
-                for (let x = 0; x < cols; x++) {
-                    maze[y][x] = new Cell(x, y);
+        MazeGame.setupMaze = function() {
+            MazeGame.maze = [];
+            MazeGame.eggs = [];
+            for (let y = 0; y < MazeGame.rows; y++) {
+                MazeGame.maze[y] = [];
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    MazeGame.maze[y][x] = new MazeGame.Cell(x, y);
                 }
             }
-            if (maze[0] && maze[0][0]) {
-                generateMaze(maze[0][0]);
+            if (MazeGame.maze[0] && MazeGame.maze[0][0]) {
+                MazeGame.generateMaze(MazeGame.maze[0][0]);
             } else {
                 console.error("Maze starting cell undefined.");
                 return;
             }
 
             const deadEnds = [];
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    if (!maze[y] || !maze[y][x]) continue;
-                    const cell = maze[y][x];
+            for (let y = 0; y < MazeGame.rows; y++) {
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
+                    const cell = MazeGame.maze[y][x];
                     const closedWalls = Object.values(cell.walls).filter(w => w).length;
                     if (closedWalls >= 3 && !(x === 0 && y === 0)) {
                         deadEnds.push({ x, y });
@@ -268,128 +271,128 @@
                 { tooltip: 'Instagram (About Me)', url: 'https://www.instagram.com/kr4ckhe4d/', icon: 'profile' }
             ];
 
-            eggs = deadEnds.slice(0, Math.min(3, deadEnds.length, eggData.length)).map((pos, i) => ({
+            MazeGame.eggs = deadEnds.slice(0, Math.min(3, deadEnds.length, eggData.length)).map((pos, i) => ({
                 ...pos,
                 tooltip: eggData[i].tooltip,
                 url: eggData[i].url,
                 icon: eggData[i].icon
             }));
 
-            if (eggs.length < 3) {
-                const occupiedSpots = new Set(eggs.map(e => `${e.x},${e.y}`));
-                if (!(player.x === 0 && player.y === 0)) occupiedSpots.add("0,0");
+            if (MazeGame.eggs.length < 3) {
+                const occupiedSpots = new Set(MazeGame.eggs.map(e => `${e.x},${e.y}`));
+                if (!(MazeGame.player.x === 0 && MazeGame.player.y === 0)) occupiedSpots.add("0,0");
                 const potentialSpots = [
-                    {x: cols - 1, y: rows - 1}, {x: 0, y: rows - 2}, {x: cols - 2, y: 0},
-                    {x: 1, y: 1}, {x:cols-2, y:rows-2} 
+                    {x: MazeGame.cols - 1, y: MazeGame.rows - 1}, {x: 0, y: MazeGame.rows - 2}, {x: MazeGame.cols - 2, y: 0},
+                    {x: 1, y: 1}, {x: MazeGame.cols-2, y: MazeGame.rows-2}
                 ];
-                for (let i = eggs.length; i < Math.min(3, eggData.length); i++) {
+                for (let i = MazeGame.eggs.length; i < Math.min(3, eggData.length); i++) {
                     for (const spot of potentialSpots) {
                          const key = `${spot.x},${spot.y}`;
-                         if (spot.x < cols && spot.y < rows && !occupiedSpots.has(key)) {
-                            eggs.push({
+                         if (spot.x < MazeGame.cols && spot.y < MazeGame.rows && !occupiedSpots.has(key)) {
+                            MazeGame.eggs.push({
                                 ...spot,
                                 tooltip: eggData[i % eggData.length].tooltip,
                                 url: eggData[i % eggData.length].url,
                                 icon: eggData[i % eggData.length].icon
                             });
                             occupiedSpots.add(key);
-                            if (eggs.length >=3) break;
+                            if (MazeGame.eggs.length >=3) break;
                          }
                     }
-                     if (eggs.length >=3) break;
+                     if (MazeGame.eggs.length >=3) break;
                 }
             }
-            player = { x: 0, y: 0 };
+            MazeGame.player = { x: 0, y: 0 };
         }
 
-        function drawPlayer(currentCellWidth, currentCellHeight) {
-            ctx.beginPath();
-            ctx.arc(
-                player.x * currentCellWidth + currentCellWidth / 2,
-                player.y * currentCellHeight + currentCellHeight / 2,
+        MazeGame.drawPlayer = function(currentCellWidth, currentCellHeight) {
+            MazeGame.ctx.beginPath();
+            MazeGame.ctx.arc(
+                MazeGame.player.x * currentCellWidth + currentCellWidth / 2,
+                MazeGame.player.y * currentCellHeight + currentCellHeight / 2,
                 Math.min(currentCellWidth, currentCellHeight) / 3.5,
                 0, Math.PI * 2
             );
-            ctx.fillStyle = '#00ffcc'; 
-            ctx.fill();
-            ctx.strokeStyle = '#111'; 
-            ctx.lineWidth = 2;
+            MazeGame.ctx.fillStyle = '#00ffcc';
+            MazeGame.ctx.fill();
+            MazeGame.ctx.strokeStyle = '#111';
+            MazeGame.ctx.lineWidth = 2;
         }
 
-        function drawEggs(currentCellWidth, currentCellHeight) {
-            eggs.forEach(egg => {
+        MazeGame.drawEggs = function(currentCellWidth, currentCellHeight) {
+            MazeGame.eggs.forEach(egg => {
                 const eggX = egg.x * currentCellWidth + currentCellWidth / 2;
                 const eggY = egg.y * currentCellHeight + currentCellHeight / 2;
                 const iconSizeBase = Math.min(currentCellWidth, currentCellHeight);
 
-                ctx.beginPath();
-                ctx.arc(eggX, eggY, iconSizeBase / 3, 0, Math.PI * 2);
-                ctx.fillStyle = 'gold'; 
-                ctx.fill();
-                ctx.strokeStyle = '#DAA520'; 
-                ctx.lineWidth = 1.5;
-                ctx.stroke();
+                MazeGame.ctx.beginPath();
+                MazeGame.ctx.arc(eggX, eggY, iconSizeBase / 3, 0, Math.PI * 2);
+                MazeGame.ctx.fillStyle = 'gold';
+                MazeGame.ctx.fill();
+                MazeGame.ctx.strokeStyle = '#DAA520';
+                MazeGame.ctx.lineWidth = 1.5;
+                MazeGame.ctx.stroke();
 
-                ctx.fillStyle = '#333';
-                ctx.textAlign = 'center';
-                ctx.textBaseline = 'middle';
+                MazeGame.ctx.fillStyle = '#333';
+                MazeGame.ctx.textAlign = 'center';
+                MazeGame.ctx.textBaseline = 'middle';
                 const iconFontSize = iconSizeBase / 2.8;
 
                 switch (egg.icon) {
                     case 'linkedin':
-                        ctx.font = `bold ${iconFontSize}px Arial`;
-                        ctx.fillText("in", eggX, eggY + iconFontSize * 0.05);
+                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
+                        MazeGame.ctx.fillText("in", eggX, eggY + iconFontSize * 0.05);
                         break;
                     case 'github':
                         const headRadius = iconSizeBase / 7;
                         const bodyWidth = iconSizeBase / 3.5;
                         const bodyHeight = iconSizeBase / 4.5;
-                        ctx.beginPath();
-                        ctx.arc(eggX, eggY - headRadius / 1.5, headRadius, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.fillRect(eggX - bodyWidth / 2, eggY, bodyWidth, bodyHeight);
-                        ctx.beginPath();
-                        ctx.moveTo(eggX - headRadius, eggY - headRadius * 1.5);
-                        ctx.lineTo(eggX - headRadius / 2, eggY - headRadius * 2.5);
-                        ctx.lineTo(eggX, eggY - headRadius * 1.5);
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.moveTo(eggX + headRadius, eggY - headRadius * 1.5);
-                        ctx.lineTo(eggX + headRadius / 2, eggY - headRadius * 2.5);
-                        ctx.lineTo(eggX, eggY - headRadius * 1.5);
-                        ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, eggY - headRadius / 1.5, headRadius, 0, Math.PI * 2);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.fillRect(eggX - bodyWidth / 2, eggY, bodyWidth, bodyHeight);
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.moveTo(eggX - headRadius, eggY - headRadius * 1.5);
+                        MazeGame.ctx.lineTo(eggX - headRadius / 2, eggY - headRadius * 2.5);
+                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.moveTo(eggX + headRadius, eggY - headRadius * 1.5);
+                        MazeGame.ctx.lineTo(eggX + headRadius / 2, eggY - headRadius * 2.5);
+                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
+                        MazeGame.ctx.fill();
                         break;
                     case 'profile':
                         const pHeadRadius = iconSizeBase / 6;
                         const pShoulderY = eggY + pHeadRadius / 1.5;
                         const pShoulderWidth = iconSizeBase / 3;
-                        ctx.beginPath();
-                        ctx.arc(eggX, eggY - pHeadRadius / 2, pHeadRadius, 0, Math.PI * 2);
-                        ctx.fill();
-                        ctx.beginPath();
-                        ctx.arc(eggX, pShoulderY, pShoulderWidth / 2, Math.PI, 0, false);
-                        ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, eggY - pHeadRadius / 2, pHeadRadius, 0, Math.PI * 2);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, pShoulderY, pShoulderWidth / 2, Math.PI, 0, false);
+                        MazeGame.ctx.fill();
                         break;
                     default:
-                        ctx.font = `bold ${iconFontSize}px Arial`;
-                        ctx.fillText("?", eggX, eggY);
+                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
+                        MazeGame.ctx.fillText("?", eggX, eggY);
                 }
             });
         }
 
-        function showMessage(text) {
-            gameMessage.textContent = text;
-            gameMessage.style.opacity = 1;
+        MazeGame.showMessage = function(text) {
+            MazeGame.gameMessage.textContent = text;
+            MazeGame.gameMessage.style.opacity = 1;
             setTimeout(() => {
-                gameMessage.style.opacity = 0;
+                MazeGame.gameMessage.style.opacity = 0;
             }, 2500); 
         }
 
-        function checkCollision(dx, dy) {
-            if (!maze[player.y] || !maze[player.y][player.x]) {
+        MazeGame.checkCollision = function(dx, dy) {
+            if (!MazeGame.maze[MazeGame.player.y] || !MazeGame.maze[MazeGame.player.y][MazeGame.player.x]) {
                 return true;
             }
-            const cell = maze[player.y][player.x];
+            const cell = MazeGame.maze[MazeGame.player.y][MazeGame.player.x];
             if (dx === 1 && cell.walls.right) return true;
             if (dx === -1 && cell.walls.left) return true;
             if (dy === 1 && cell.walls.bottom) return true;
@@ -397,86 +400,86 @@
             return false;
         }
 
-        function movePlayer(dx, dy) {
-            if (checkCollision(dx, dy)) return;
-            const newX = player.x + dx;
-            const newY = player.y + dy;
-            if (newX >= 0 && newY >= 0 && newX < cols && newY < rows) {
-                player.x = newX;
-                player.y = newY;
-                const egg = eggs.find(e => e.x === newX && e.y === newY);
+        MazeGame.movePlayer = function(dx, dy) {
+            if (MazeGame.checkCollision(dx, dy)) return;
+            const newX = MazeGame.player.x + dx;
+            const newY = MazeGame.player.y + dy;
+            if (newX >= 0 && newY >= 0 && newX < MazeGame.cols && newY < MazeGame.rows) {
+                MazeGame.player.x = newX;
+                MazeGame.player.y = newY;
+                const egg = MazeGame.eggs.find(e => e.x === newX && e.y === newY);
                 if (egg) {
-                    showMessage(`Opening ${egg.tooltip}...`);
+                    MazeGame.showMessage(`Opening ${egg.tooltip}...`);
                     if (egg.url && egg.url !== '#') {
                         setTimeout(() => { window.open(egg.url, '_blank'); }, 1000);
                     }
                 }
-                render();
+                MazeGame.render();
             }
         }
 
-        function handleMouseMove(e) {
-            const rect = canvas.getBoundingClientRect();
+        MazeGame.handleMouseMove = function(e) {
+            const rect = MazeGame.canvas.getBoundingClientRect();
             const mouseX = e.clientX - rect.left;
             const mouseY = e.clientY - rect.top;
-            const currentCellWidth = canvas.width / cols;
-            const currentCellHeight = canvas.height / rows;
+            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
+            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
 
-            if (mouseX < 0 || mouseY < 0 || mouseX >= canvas.width || mouseY >= canvas.height) {
-                tooltipMessage.style.display = 'none';
+            if (mouseX < 0 || mouseY < 0 || mouseX >= MazeGame.canvas.width || mouseY >= MazeGame.canvas.height) {
+                MazeGame.tooltipMessage.style.display = 'none';
                 return;
             }
             const cellX = Math.floor(mouseX / currentCellWidth);
             const cellY = Math.floor(mouseY / currentCellHeight);
-            const egg = eggs.find(e => e.x === cellX && e.y === cellY);
+            const egg = MazeGame.eggs.find(e => e.x === cellX && e.y === cellY);
 
             if (egg) {
-                tooltipMessage.textContent = egg.tooltip;
-                tooltipMessage.style.left = (e.pageX + 10) + 'px';
-                tooltipMessage.style.top = (e.pageY + 10) + 'px';
-                tooltipMessage.style.display = 'block';
+                MazeGame.tooltipMessage.textContent = egg.tooltip;
+                MazeGame.tooltipMessage.style.left = (e.pageX + 10) + 'px';
+                MazeGame.tooltipMessage.style.top = (e.pageY + 10) + 'px';
+                MazeGame.tooltipMessage.style.display = 'block';
             } else {
-                tooltipMessage.style.display = 'none';
+                MazeGame.tooltipMessage.style.display = 'none';
             }
         }
 
-        function handleTouchStart(e) {
+        MazeGame.handleTouchStart = function(e) {
             e.preventDefault();
             const touch = e.touches[0];
-            touchStartX = touch.clientX;
-            touchStartY = touch.clientY;
+            MazeGame.touchStartX = touch.clientX;
+            MazeGame.touchStartY = touch.clientY;
         }
 
-        function handleTouchEnd(e) {
+        MazeGame.handleTouchEnd = function(e) {
             e.preventDefault();
             if (e.changedTouches.length === 0) return;
             const touch = e.changedTouches[0];
             const touchEndX = touch.clientX;
             const touchEndY = touch.clientY;
-            const dX = touchEndX - touchStartX;
-            const dY = touchEndY - touchStartY;
+            const dX = touchEndX - MazeGame.touchStartX;
+            const dY = touchEndY - MazeGame.touchStartY;
 
             if (Math.abs(dX) > Math.abs(dY)) {
-                if (Math.abs(dX) > swipeThreshold) movePlayer(dX > 0 ? 1 : -1, 0);
+                if (Math.abs(dX) > MazeGame.swipeThreshold) MazeGame.movePlayer(dX > 0 ? 1 : -1, 0);
             } else {
-                if (Math.abs(dY) > swipeThreshold) movePlayer(0, dY > 0 ? 1 : -1);
+                if (Math.abs(dY) > MazeGame.swipeThreshold) MazeGame.movePlayer(0, dY > 0 ? 1 : -1);
             }
         }
 
-        function handleKeyDown(e) {
+        MazeGame.handleKeyDown = function(e) {
             let moved = false;
             switch (e.key) {
-                case 'ArrowUp': case 'w': case 'W': movePlayer(0, -1); moved = true; break;
-                case 'ArrowRight': case 'd': case 'D': movePlayer(1, 0); moved = true; break;
-                case 'ArrowDown': case 's': case 'S': movePlayer(0, 1); moved = true; break;
-                case 'ArrowLeft': case 'a': case 'A': movePlayer(-1, 0); moved = true; break;
+                case 'ArrowUp': case 'w': case 'W': MazeGame.movePlayer(0, -1); moved = true; break;
+                case 'ArrowRight': case 'd': case 'D': MazeGame.movePlayer(1, 0); moved = true; break;
+                case 'ArrowDown': case 's': case 'S': MazeGame.movePlayer(0, 1); moved = true; break;
+                case 'ArrowLeft': case 'a': case 'A': MazeGame.movePlayer(-1, 0); moved = true; break;
             }
             if (moved) e.preventDefault();
         }
 
-        function resizeCanvas() {
-            const containerWidth = gameContainer.clientWidth;
-            const containerHeight = gameContainer.clientHeight;
+        MazeGame.resizeCanvas = function() {
+            const containerWidth = MazeGame.gameContainer.clientWidth;
+            const containerHeight = MazeGame.gameContainer.clientHeight;
             const navElement = document.querySelector('nav');
             const navHeight = navElement ? navElement.offsetHeight : 0;
             
@@ -488,77 +491,78 @@
 
             const size = Math.min(effectiveWidth, effectiveHeight) * 0.98;
 
-            canvas.width = Math.max(200, size); 
-            canvas.height = Math.max(200, size);
+            MazeGame.canvas.width = Math.max(200, size);
+            MazeGame.canvas.height = Math.max(200, size);
 
-            if (gameActive) render();
+            if (MazeGame.gameActive) MazeGame.render();
         }
 
-        function render() {
-            if (!maze.length || !maze[0] || !maze[0].length || !ctx) return;
-            ctx.clearRect(0, 0, canvas.width, canvas.height);
-            const currentCellWidth = canvas.width / cols;
-            const currentCellHeight = canvas.height / rows;
+        MazeGame.render = function() {
+            if (!MazeGame.maze.length || !MazeGame.maze[0] || !MazeGame.maze[0].length || !MazeGame.ctx) return;
+            MazeGame.ctx.clearRect(0, 0, MazeGame.canvas.width, MazeGame.canvas.height);
+            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
+            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
 
-            ctx.strokeStyle = '#fff'; 
-            ctx.lineWidth = Math.max(1, Math.min(currentCellWidth, currentCellHeight) / 15); 
+            MazeGame.ctx.strokeStyle = '#fff';
+            MazeGame.ctx.lineWidth = Math.max(1, Math.min(currentCellWidth, currentCellHeight) / 15);
 
-            for (let y = 0; y < rows; y++) {
-                for (let x = 0; x < cols; x++) {
-                    if (!maze[y] || !maze[y][x]) continue;
-                    const cell = maze[y][x];
+            for (let y = 0; y < MazeGame.rows; y++) {
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
+                    const cell = MazeGame.maze[y][x];
                     const drawX = x * currentCellWidth;
                     const drawY = y * currentCellHeight;
-                    if (cell.walls.top) { ctx.beginPath(); ctx.moveTo(drawX, drawY); ctx.lineTo(drawX + currentCellWidth, drawY); ctx.stroke(); }
-                    if (cell.walls.right) { ctx.beginPath(); ctx.moveTo(drawX + currentCellWidth, drawY); ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); ctx.stroke(); }
-                    if (cell.walls.bottom) { ctx.beginPath(); ctx.moveTo(drawX, drawY + currentCellHeight); ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); ctx.stroke(); }
-                    if (cell.walls.left) { ctx.beginPath(); ctx.moveTo(drawX, drawY); ctx.lineTo(drawX, drawY + currentCellHeight); ctx.stroke(); }
+                    if (cell.walls.top) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY); MazeGame.ctx.stroke(); }
+                    if (cell.walls.right) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX + currentCellWidth, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
+                    if (cell.walls.bottom) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY + currentCellHeight); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
+                    if (cell.walls.left) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
                 }
             }
-            drawEggs(currentCellWidth, currentCellHeight);
-            drawPlayer(currentCellWidth, currentCellHeight);
+            MazeGame.drawEggs(currentCellWidth, currentCellHeight);
+            MazeGame.drawPlayer(currentCellWidth, currentCellHeight);
         }
 
-        let gameActive = false;
 
-        function startGame() {
-            if (gameActive) return;
-            if (!canvas || !ctx) { setTimeout(startGame, 100); return; }
-            resizeCanvas();
-            setupMaze();
-            if (maze.length > 0) {
-                render();
-                canvas.style.opacity = 1;
-                gameActive = true;
-                document.addEventListener('keydown', handleKeyDown);
-                canvas.addEventListener('mousemove', handleMouseMove);
-                canvas.addEventListener('mouseout', () => { tooltipMessage.style.display = 'none'; });
-                canvas.addEventListener('touchstart', handleTouchStart, { passive: false });
-                canvas.addEventListener('touchend', handleTouchEnd, { passive: false });
+        MazeGame.startGame = function() {
+            if (MazeGame.gameActive) return;
+            if (!MazeGame.canvas || !MazeGame.ctx) { setTimeout(MazeGame.startGame, 100); return; }
+            MazeGame.resizeCanvas();
+            MazeGame.setupMaze();
+            if (MazeGame.maze.length > 0) {
+                MazeGame.render();
+                MazeGame.canvas.style.opacity = 1;
+                MazeGame.gameActive = true;
+                document.addEventListener('keydown', (e) => MazeGame.handleKeyDown(e));
+                MazeGame.canvas.addEventListener('mousemove', (e) => MazeGame.handleMouseMove(e));
+                MazeGame.canvas.addEventListener('mouseout', () => { MazeGame.tooltipMessage.style.display = 'none'; });
+                MazeGame.canvas.addEventListener('touchstart', (e) => MazeGame.handleTouchStart(e), { passive: false });
+                MazeGame.canvas.addEventListener('touchend', (e) => MazeGame.handleTouchEnd(e), { passive: false });
             } else {
-                showMessage("Error: Could not load game maze.");
+                MazeGame.showMessage("Error: Could not load game maze.");
             }
         }
 
-        function showIntroMessages() {
-            introMessage1.style.opacity = 1;
+        MazeGame.showIntroMessages = function() {
+            MazeGame.introMessage1.style.opacity = 1;
             setTimeout(() => {
-                introMessage1.style.opacity = 0;
+                MazeGame.introMessage1.style.opacity = 0;
                 setTimeout(() => {
-                    introMessage2.style.opacity = 1;
+                    MazeGame.introMessage2.style.opacity = 1;
                     setTimeout(() => {
-                        introMessage2.style.opacity = 0;
-                        setTimeout(startGame, 1000); 
+                        MazeGame.introMessage2.style.opacity = 0;
+                        setTimeout(MazeGame.startGame, 1000);
                     }, 2000); 
                 }, 1000); 
             }, 2000); 
         }
 
-        window.addEventListener('load', () => {
-            showIntroMessages();
-            resizeCanvas();
-            window.addEventListener('resize', resizeCanvas);
-        });
+        MazeGame.initGame = function() {
+            this.showIntroMessages();
+            this.resizeCanvas(); // Initial resize
+            window.addEventListener('resize', () => this.resizeCanvas()); // Ensure 'this' is MazeGame
+        };
+
+        window.addEventListener('load', () => MazeGame.initGame());
 
     </script>
 </body>
