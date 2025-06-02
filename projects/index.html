@@ -169,20 +169,22 @@
         const ewStreetNames = ["Main St", "Oak Ave", "Elm Dr", "Cedar Ln", "Maple Rd", "Willow Way", "River Run", "Pine Pass", "Birch Blvd", "Aspen Cres", "Canyon Rd"];
         const nsStreetNames = ["Park Ave", "Highland Dr", "Valley Rd", "Sunset Blvd", "Sunrise Ave", "Central St", "First St", "Second St", "Third Ave", "Fourth Way", "Fifth Pl"];
 
+        // Reusable Box3 for player collider
+        let playerColliderBox = new THREE.Box3();
 
         init();
         animate();
 
-        function getPlayerCollider(centerPosition) {
+        // Updates a THREE.Box3 to represent the player's collision volume.
+        function updatePlayerColliderBox(centerPosition, outBox) {
             const halfWidth = playerCollisionWidth / 2;
             const halfDepth = playerCollisionDepth / 2;
             const feetY = centerPosition.y - playerHeight; 
             const headY = centerPosition.y; 
 
-            return new THREE.Box3(
-                new THREE.Vector3(centerPosition.x - halfWidth, feetY, centerPosition.z - halfDepth),
-                new THREE.Vector3(centerPosition.x + halfWidth, headY, centerPosition.z + halfDepth)
-            );
+            outBox.min.set(centerPosition.x - halfWidth, feetY, centerPosition.z - halfDepth);
+            outBox.max.set(centerPosition.x + halfWidth, headY, centerPosition.z + halfDepth);
+            // No need to return, outBox is modified directly.
         }
 
 
@@ -246,8 +248,8 @@
             scene.add(directionalLight.target);
 
             directionalLight.castShadow = true;
-            directionalLight.shadow.mapSize.width = 2048; 
-            directionalLight.shadow.mapSize.height = 2048; 
+            directionalLight.shadow.mapSize.width = 1024;
+            directionalLight.shadow.mapSize.height = 1024;
             directionalLight.shadow.camera.near = 0.5;
             directionalLight.shadow.camera.far = citySize * 1.5; // Adjusted shadow camera far plane
             directionalLight.shadow.camera.left = -actualCityRadius * 1.2; 
@@ -324,24 +326,38 @@
             }
         }
         
-        function addBuildingFeatures(building, buildingScaledWidth, buildingScaledHeight, buildingScaledDepth, isShop) {
-            const doorBoxThickness = 0.2; 
-            const windowBoxThickness = 0.1;
+        // Note: windowInstances, doorInstances, currentWindowInstanceIndex, currentDoorInstanceIndex, standardDoorGeometry, standardWindowGeometry, dummyFeature
+        // are now defined at the start of createBuildings() and are accessible by this function.
+        function addBuildingFeatures(building, buildingScaledWidth, buildingScaledHeight, buildingScaledDepth, isShop,
+                                     windowInstances, doorInstances, currentWindowInstanceIndexRef, currentDoorInstanceIndexRef,
+                                     standardWindowGeometry, standardDoorGeometry, dummyFeature) {
+            const doorBoxThickness = 0.2; // Standard depth, matches geometry if not scaled in Z
+            const windowBoxThickness = 0.1; // Standard depth
             const frontFaceZ = building.position.z + buildingScaledDepth / 2;
 
-            const doorHeight = Math.min(buildingScaledHeight * 0.25, playerHeight * 1.3); 
-            const doorWidth = buildingScaledWidth * 0.2;
-            if (buildingScaledHeight > doorHeight * 1.1) { 
-                const doorGeometry = new THREE.BoxGeometry(doorWidth, doorHeight, doorBoxThickness); 
-                const door = new THREE.Mesh(doorGeometry, doorMaterial);
-                door.position.set(building.position.x, building.position.y - buildingScaledHeight / 2 + doorHeight / 2, frontFaceZ + doorBoxThickness / 2 );
-                door.castShadow = false; door.receiveShadow = false; 
-                scene.add(door);
+            // Door
+            const actualDoorHeight = Math.min(buildingScaledHeight * 0.25, playerHeight * 1.3);
+            const actualDoorWidth = buildingScaledWidth * 0.2;
+            if (buildingScaledHeight > actualDoorHeight * 1.1 && currentDoorInstanceIndexRef.value < doorInstances.count) {
+                dummyFeature.position.set(
+                    building.position.x,
+                    building.position.y - buildingScaledHeight / 2 + actualDoorHeight / 2,
+                    frontFaceZ + doorBoxThickness / 2
+                );
+                dummyFeature.scale.set(
+                    actualDoorWidth / standardDoorGeometry.parameters.width,
+                    actualDoorHeight / standardDoorGeometry.parameters.height,
+                    doorBoxThickness / standardDoorGeometry.parameters.depth // Assuming standard geometry depth is used
+                );
+                dummyFeature.updateMatrix();
+                doorInstances.setMatrixAt(currentDoorInstanceIndexRef.value, dummyFeature.matrix);
+                currentDoorInstanceIndexRef.value++;
             }
 
-            const windowSizeForZFace = Math.min(buildingScaledWidth * 0.12, buildingScaledHeight * 0.1); 
-            const windowSpacingZ = windowSizeForZFace * 1.8; 
-            let startWindowY_ZFace = building.position.y - buildingScaledHeight / 2 + ( (buildingScaledHeight > doorHeight * 1.1) ? doorHeight : 0 ) + windowSizeForZFace * 0.5;
+            // Windows on Z-face (front/back of building)
+            const actualWindowSizeForZFace = Math.min(buildingScaledWidth * 0.12, buildingScaledHeight * 0.1);
+            const windowSpacingZ = actualWindowSizeForZFace * 1.8;
+            let startWindowY_ZFace = building.position.y - buildingScaledHeight / 2 + ( (buildingScaledHeight > actualDoorHeight * 1.1) ? actualDoorHeight : 0 ) + actualWindowSizeForZFace * 0.5;
             let shopSignBottomEdge = -Infinity, shopSignTopEdge = -Infinity;
             if (isShop) {
                 const shopSignHeight = Math.max(5, buildingScaledHeight * 0.1);
@@ -349,45 +365,101 @@
                 shopSignBottomEdge = shopSignCenterY - shopSignHeight / 2;
                 shopSignTopEdge = shopSignCenterY + shopSignHeight / 2;
             }
-            const zFaceWindowGeometry = new THREE.BoxGeometry(windowSizeForZFace, windowSizeForZFace, windowBoxThickness);
-            for (let y = startWindowY_ZFace; y < building.position.y + buildingScaledHeight / 2 - windowSizeForZFace; y += windowSpacingZ) {
-                if (isShop && (Math.max(y, shopSignBottomEdge) < Math.min(y + windowSizeForZFace, shopSignTopEdge))) continue; 
-                for (let x = building.position.x - buildingScaledWidth / 2 + windowSizeForZFace * 0.5; x < building.position.x + buildingScaledWidth / 2 - windowSizeForZFace * 0.25; x += windowSpacingZ) {
-                    if (Math.random() > 0.15) { 
-                        const windowMesh = new THREE.Mesh(zFaceWindowGeometry, windowMaterial); 
-                        windowMesh.position.set(x, y, frontFaceZ + windowBoxThickness / 2);
-                        windowMesh.castShadow = false; windowMesh.receiveShadow = false; 
-                        scene.add(windowMesh);
+
+            for (let y = startWindowY_ZFace; y < building.position.y + buildingScaledHeight / 2 - actualWindowSizeForZFace; y += windowSpacingZ) {
+                if (isShop && (Math.max(y, shopSignBottomEdge) < Math.min(y + actualWindowSizeForZFace, shopSignTopEdge))) continue;
+                for (let x = building.position.x - buildingScaledWidth / 2 + actualWindowSizeForZFace * 0.5; x < building.position.x + buildingScaledWidth / 2 - actualWindowSizeForZFace * 0.25; x += windowSpacingZ) {
+                    if (Math.random() > 0.15 && currentWindowInstanceIndexRef.value < windowInstances.count) {
+                        dummyFeature.position.set(x, y, frontFaceZ + windowBoxThickness / 2);
+                        dummyFeature.scale.set(
+                            actualWindowSizeForZFace / standardWindowGeometry.parameters.width,
+                            actualWindowSizeForZFace / standardWindowGeometry.parameters.height,
+                            windowBoxThickness / standardWindowGeometry.parameters.depth
+                        );
+                        dummyFeature.updateMatrix();
+                        windowInstances.setMatrixAt(currentWindowInstanceIndexRef.value, dummyFeature.matrix);
+                        currentWindowInstanceIndexRef.value++;
                     }
                 }
             }
 
-            const sideFaceX = building.position.x + buildingScaledWidth / 2;
-            const windowSizeForXFace = Math.min(buildingScaledDepth * 0.12, buildingScaledHeight * 0.1); 
-            const windowSpacingX = windowSizeForXFace * 1.8;
-            let startWindowY_XFace = building.position.y - buildingScaledHeight / 2 + windowSizeForXFace * 0.5;
-            const xFaceWindowGeometry = new THREE.BoxGeometry(windowBoxThickness, windowSizeForXFace, windowSizeForXFace);
-            for (let y = startWindowY_XFace; y < building.position.y + buildingScaledHeight / 2 - windowSizeForXFace; y += windowSpacingX) {
-                for (let z = building.position.z - buildingScaledDepth / 2 + windowSizeForXFace * 0.5; z < building.position.z + buildingScaledDepth / 2 - windowSizeForXFace * 0.25; z += windowSpacingX) {
-                     if (Math.random() > 0.2) { 
-                        const windowMesh = new THREE.Mesh(xFaceWindowGeometry, windowMaterial); 
-                        windowMesh.position.set(sideFaceX + windowBoxThickness / 2, y, z);
-                        windowMesh.castShadow = false; windowMesh.receiveShadow = false; 
-                        scene.add(windowMesh);
+            // Windows on X-face (sides of building)
+            const sideFaceX = building.position.x + buildingScaledWidth / 2; // Assuming windows on +X side
+            const actualWindowSizeForXFace = Math.min(buildingScaledDepth * 0.12, buildingScaledHeight * 0.1);
+            const windowSpacingX = actualWindowSizeForXFace * 1.8;
+            let startWindowY_XFace = building.position.y - buildingScaledHeight / 2 + actualWindowSizeForXFace * 0.5;
+
+            for (let y = startWindowY_XFace; y < building.position.y + buildingScaledHeight / 2 - actualWindowSizeForXFace; y += windowSpacingX) {
+                for (let z = building.position.z - buildingScaledDepth / 2 + actualWindowSizeForXFace * 0.5; z < building.position.z + buildingScaledDepth / 2 - actualWindowSizeForXFace * 0.25; z += windowSpacingX) {
+                     if (Math.random() > 0.2 && currentWindowInstanceIndexRef.value < windowInstances.count) {
+                        // For X-face windows, the geometry is rotated if width != height.
+                        // Standard geometry is Box(width, height, depth). For side windows, width is along building depth, height is vertical.
+                        // The windowBoxThickness here applies to the "depth" of the window inset into the wall.
+                        dummyFeature.position.set(sideFaceX + windowBoxThickness / 2, y, z); // Depth of window inset for X-face
+                        dummyFeature.scale.set(
+                            windowBoxThickness / standardWindowGeometry.parameters.width, // This seems to map window depth to standard width
+                            actualWindowSizeForXFace / standardWindowGeometry.parameters.height, // Maps actual height to standard height
+                            actualWindowSizeForXFace / standardWindowGeometry.parameters.depth   // Maps actual width (along building Z) to standard depth
+                        );
+                        // If standardWindowGeometry is (std_w, std_h, std_d)
+                        // We want the mesh to be (windowBoxThickness, actualWindowSizeForXFace, actualWindowSizeForXFace)
+                        // So scale factors:
+                        // scale.x = windowBoxThickness / std_w
+                        // scale.y = actualWindowSizeForXFace / std_h
+                        // scale.z = actualWindowSizeForXFace / std_d
+                        // The previous xFaceWindowGeometry was new THREE.BoxGeometry(windowBoxThickness, windowSizeForXFace, windowSizeForXFace)
+                        // So this scaling logic is correct.
+                        dummyFeature.updateMatrix();
+                        windowInstances.setMatrixAt(currentWindowInstanceIndexRef.value, dummyFeature.matrix);
+                        currentWindowInstanceIndexRef.value++;
                     }
                 }
             }
+            // Could add windows for -X face and -Z face as well if desired, by creating another loop or adjusting positions.
+            // For now, only +X and +Z faces get windows/doors.
         }
 
         function createBuildings() {
-            const buildingBaseGeometry = new THREE.BoxGeometry(1, 1, 1); 
+            const buildingBaseGeometry = new THREE.BoxGeometry(1, 1, 1);
+
+            // Standard dimensions for instanced geometries
+            const standardDoorWidth = 2;
+            const standardDoorHeight = 4;
+            const standardDoorDepth = 0.2;
+            const standardWindowSize = 1.5; // Assuming square for simplicity, depth is windowBoxThickness
+            const standardWindowDepth = 0.1;
+
+            const standardDoorGeometry = new THREE.BoxGeometry(standardDoorWidth, standardDoorHeight, standardDoorDepth);
+            const standardWindowGeometry = new THREE.BoxGeometry(standardWindowSize, standardWindowSize, standardWindowDepth);
+
+            const buildingsPerBlockMax = 2; // From existing logic
+            const windowsPerBuildingMax = 100; // Generous estimate
+            const doorsPerBuildingMax = 1;   // Typically one door
+
+            const maxWindows = numBlocks * numBlocks * buildingsPerBlockMax * windowsPerBuildingMax;
+            const maxDoors = numBlocks * numBlocks * buildingsPerBlockMax * doorsPerBuildingMax;
+
+            const windowInstances = new THREE.InstancedMesh(standardWindowGeometry, windowMaterial, maxWindows);
+            windowInstances.castShadow = false;
+            windowInstances.receiveShadow = false;
+            scene.add(windowInstances);
+
+            const doorInstances = new THREE.InstancedMesh(standardDoorGeometry, doorMaterial, maxDoors);
+            doorInstances.castShadow = false;
+            doorInstances.receiveShadow = false;
+            scene.add(doorInstances);
+
+            let currentWindowInstanceIndexRef = { value: 0 }; // Using object wrapper for pass-by-reference behavior
+            let currentDoorInstanceIndexRef = { value: 0 };
+            const dummyFeature = new THREE.Object3D();
+
             for (let i = -numBlocks; i < numBlocks; i++) { 
                 for (let j = -numBlocks; j < numBlocks; j++) { 
                     const blockCenterX = i * (blockSize + roadWidth) + blockSize / 2;
                     const blockCenterZ = j * (blockSize + roadWidth) + blockSize / 2;
                     
                     const buildingsPerBlock = Math.floor(Math.random() * 2) + 1; 
-                    for (let k = 0; k < buildingsPerBlock; k++) {
+                    for (let k_building = 0; k_building < buildingsPerBlock; k_building++) { // Renamed k to k_building for clarity
                         const isShop = Math.random() < 0.2;
                         const currentBuildingWidth = Math.random() * (blockSize / 2.5) + (blockSize / 5); 
                         const currentBuildingDepth = Math.random() * (blockSize / 2.5) + (blockSize / 5);
@@ -411,7 +483,11 @@
                         const buildingBox = new THREE.Box3().setFromObject(building);
                         buildings.push({ mesh: building, boundingBox: buildingBox });
 
-                        addBuildingFeatures(building, currentBuildingWidth, currentBuildingHeight, currentBuildingDepth, isShop);
+                        addBuildingFeatures(
+                            building, currentBuildingWidth, currentBuildingHeight, currentBuildingDepth, isShop,
+                            windowInstances, doorInstances, currentWindowInstanceIndexRef, currentDoorInstanceIndexRef,
+                            standardWindowGeometry, standardDoorGeometry, dummyFeature
+                        );
 
                         if (isShop) {
                             const signVisualHeight = Math.max(5, currentBuildingHeight * 0.1); 
@@ -427,6 +503,10 @@
                     }
                 }
             }
+            windowInstances.count = currentWindowInstanceIndexRef.value;
+            doorInstances.count = currentDoorInstanceIndexRef.value;
+            windowInstances.instanceMatrix.needsUpdate = true;
+            doorInstances.instanceMatrix.needsUpdate = true;
         }
 
         function createCars() {
@@ -450,102 +530,223 @@
             }
         }
 
-        function placeTree(x, z) {
-            const trunk = new THREE.Mesh(sharedTreeTrunkGeometry, treeTrunkMaterial);
-            trunk.position.set(x, 6, z); 
-            trunk.castShadow = true;
-            trunk.receiveShadow = true;
-            scene.add(trunk);
-
-            const foliage = new THREE.Mesh(sharedTreeFoliageGeometry, treeFoliageMaterial);
-            foliage.position.set(x, 12 + 5, z); 
-            foliage.castShadow = true;
-            foliage.receiveShadow = true;
-            scene.add(foliage);
-        }
-
         function createTrees() {
-            const treesPerBlockLength = 2; 
-            const treeOffsetFromRoadCenter = roadWidth / 2 + 10; 
+            const treesPerBlockLength = 2;
+            const treeOffsetFromRoadCenter = roadWidth / 2 + 10;
+            const numRoads = 2 * numBlocks + 1;
+            const blocksPerRoad = 2 * numBlocks; // Trees are placed along 'numBlocks' on each side of a road, but the loop goes from -numBlocks to < numBlocks
 
-            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
-                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
-                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) { 
-                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2; 
-                    const treeSpacing = blockSize / (treesPerBlockLength + 1); 
-                    for (let k = 1; k <= treesPerBlockLength; k++) { 
-                        const xPos = blockXStart + k * treeSpacing; 
-                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) { 
-                             placeTree(xPos, roadZCenter + treeOffsetFromRoadCenter);
-                             placeTree(xPos, roadZCenter - treeOffsetFromRoadCenter);
-                        }
-                    }
-                }
-            }
+            // Calculate max instances:
+            // Each road (numRoads) has 'blocksPerRoad' segments where trees can be placed.
+            // Each segment has 'treesPerBlockLength' trees.
+            // Each placement results in 2 trees (one on each side of the road).
+            // This logic is applied for both X-axis roads and Z-axis roads.
+            const maxTreesPerOrientation = numRoads * blocksPerRoad * treesPerBlockLength * 2;
+            const totalMaxTrees = maxTreesPerOrientation; // This seems to double count, let's verify the loop logic
+                                                           // The loops iterate over (2*numBlocks+1) roads.
+                                                           // For each road, they iterate '2*numBlocks' block segments.
+                                                           // In each segment, 'treesPerBlockLength' positions are chosen.
+                                                           // At each position, 2 trees are placed (offset + and offset -).
+                                                           // So for one orientation (e.g. roads along Z): (2*numBlocks+1) * (2*numBlocks) * treesPerBlockLength * 2
+                                                           // Total trees = 2 * ( (2*numBlocks+1) * (2*numBlocks) * treesPerBlockLength * 2 ) - but this is too high.
 
-            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
-                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
-                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) { 
-                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2; 
+            // Let's recalculate based on the loops:
+            // First loop (roads along Z, trees placed parallel to X):
+            // (2 * numBlocks + 1) iterations for road_idx
+            // (2 * numBlocks) iterations for block_col_idx
+            // treesPerBlockLength iterations for k
+            // 2 calls to placeTree per k
+            let count = 0;
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) {
+                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2;
                     const treeSpacing = blockSize / (treesPerBlockLength + 1);
-                    for (let k = 1; k <= treesPerBlockLength; k++) { 
-                        const zPos = blockZStart + k * treeSpacing; 
-                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) { 
-                            placeTree(roadXCenter + treeOffsetFromRoadCenter, zPos);
-                            placeTree(roadXCenter - treeOffsetFromRoadCenter, zPos);
+                    for (let k = 1; k <= treesPerBlockLength; k++) {
+                        const xPos = blockXStart + k * treeSpacing;
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) {
+                             count += 2; // placeTree(xPos, roadZCenter + treeOffsetFromRoadCenter); placeTree(xPos, roadZCenter - treeOffsetFromRoadCenter);
                         }
                     }
                 }
             }
+            // Second loop (roads along X, trees placed parallel to Z):
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) {
+                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const treeSpacing = blockSize / (treesPerBlockLength + 1);
+                    for (let k = 1; k <= treesPerBlockLength; k++) {
+                        const zPos = blockZStart + k * treeSpacing;
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) {
+                            count += 2; // placeTree(roadXCenter + treeOffsetFromRoadCenter, zPos); placeTree(roadXCenter - treeOffsetFromRoadCenter, zPos);
+                        }
+                    }
+                }
+            }
+            const maxTrunks = count;
+            const maxFoliage = count;
+
+            const trunkInstanceGeometry = sharedTreeTrunkGeometry.clone();
+            const trunkInstances = new THREE.InstancedMesh(trunkInstanceGeometry, treeTrunkMaterial, maxTrunks);
+            trunkInstances.castShadow = true;
+            trunkInstances.receiveShadow = true;
+            scene.add(trunkInstances);
+
+            const foliageInstanceGeometry = sharedTreeFoliageGeometry.clone();
+            const foliageInstances = new THREE.InstancedMesh(foliageInstanceGeometry, treeFoliageMaterial, maxFoliage);
+            foliageInstances.castShadow = true;
+            foliageInstances.receiveShadow = true;
+            scene.add(foliageInstances);
+
+            const dummy = new THREE.Object3D();
+            let trunkInstanceIndex = 0;
+            let foliageInstanceIndex = 0;
+
+            // Helper function to set matrix for an instance
+            function setInstanceMatrix(instances, index, x, y, z) {
+                dummy.position.set(x, y, z);
+                dummy.updateMatrix();
+                instances.setMatrixAt(index, dummy.matrix);
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) {
+                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const treeSpacing = blockSize / (treesPerBlockLength + 1);
+                    for (let k = 1; k <= treesPerBlockLength; k++) {
+                        const xPos = blockXStart + k * treeSpacing;
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) {
+                            // Tree 1
+                            setInstanceMatrix(trunkInstances, trunkInstanceIndex++, xPos, 6, roadZCenter + treeOffsetFromRoadCenter);
+                            setInstanceMatrix(foliageInstances, foliageInstanceIndex++, xPos, 12 + 5, roadZCenter + treeOffsetFromRoadCenter);
+                            // Tree 2
+                            setInstanceMatrix(trunkInstances, trunkInstanceIndex++, xPos, 6, roadZCenter - treeOffsetFromRoadCenter);
+                            setInstanceMatrix(foliageInstances, foliageInstanceIndex++, xPos, 12 + 5, roadZCenter - treeOffsetFromRoadCenter);
+                        }
+                    }
+                }
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) {
+                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const treeSpacing = blockSize / (treesPerBlockLength + 1);
+                    for (let k = 1; k <= treesPerBlockLength; k++) {
+                        const zPos = blockZStart + k * treeSpacing;
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) {
+                            // Tree 3
+                            setInstanceMatrix(trunkInstances, trunkInstanceIndex++, roadXCenter + treeOffsetFromRoadCenter, 6, zPos);
+                            setInstanceMatrix(foliageInstances, foliageInstanceIndex++, roadXCenter + treeOffsetFromRoadCenter, 12 + 5, zPos);
+                            // Tree 4
+                            setInstanceMatrix(trunkInstances, trunkInstanceIndex++, roadXCenter - treeOffsetFromRoadCenter, 6, zPos);
+                            setInstanceMatrix(foliageInstances, foliageInstanceIndex++, roadXCenter - treeOffsetFromRoadCenter, 12 + 5, zPos);
+                        }
+                    }
+                }
+            }
+            // Ensure instance counts are updated
+            trunkInstances.instanceMatrix.needsUpdate = true;
+            foliageInstances.instanceMatrix.needsUpdate = true;
         }
 
-        function placeLampPost(x, z) {
-            const post = new THREE.Mesh(sharedLampPostGeometry, lampPostMaterial);
-            post.position.set(x, 9, z); 
-            post.castShadow = true;
-            post.receiveShadow = true;
-            scene.add(post);
-
-            const light = new THREE.Mesh(sharedLampLightGeometry, lampLightMaterial);
-            light.position.set(x, 18 + 0.75, z); 
-            light.castShadow = false; 
-            light.receiveShadow = false;
-            scene.add(light);
-        }
+        // Removed placeLampPost function as it's replaced by instancing logic below
 
         function createLampPosts() {
-            const lampsPerBlockLength = 1; 
-            const lampOffsetFromRoadCenter = roadWidth / 2 + 4; 
+            const lampsPerBlockLength = 1;
+            const lampOffsetFromRoadCenter = roadWidth / 2 + 4;
 
-            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
-                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
-                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) { 
+            let lampCount = 0;
+            // Calculate max instances for lamp posts and lights
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) {
                     const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2;
-                    const lampSpacing = blockSize / (lampsPerBlockLength + 1); 
+                    const lampSpacing = blockSize / (lampsPerBlockLength + 1);
                     for (let k = 1; k <= lampsPerBlockLength; k++) {
-                        const xPos = blockXStart + k * lampSpacing; 
-                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) { 
-                             placeLampPost(xPos, roadZCenter + lampOffsetFromRoadCenter);
-                             placeLampPost(xPos, roadZCenter - lampOffsetFromRoadCenter);
+                        const xPos = blockXStart + k * lampSpacing;
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) {
+                            lampCount += 2; // Two lamps per position
                         }
                     }
                 }
             }
-
-            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) { 
-                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
-                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) { 
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) {
                     const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2;
                     const lampSpacing = blockSize / (lampsPerBlockLength + 1);
                     for (let k = 1; k <= lampsPerBlockLength; k++) {
-                        const zPos = blockZStart + k * lampSpacing; 
-                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) { 
-                            placeLampPost(roadXCenter + lampOffsetFromRoadCenter, zPos);
-                            placeLampPost(roadXCenter - lampOffsetFromRoadCenter, zPos);
+                        const zPos = blockZStart + k * lampSpacing;
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) {
+                            lampCount += 2; // Two lamps per position
                         }
                     }
                 }
             }
+            const maxPosts = lampCount;
+            const maxLights = lampCount;
+
+            const postInstanceGeometry = sharedLampPostGeometry.clone();
+            const postInstances = new THREE.InstancedMesh(postInstanceGeometry, lampPostMaterial, maxPosts);
+            postInstances.castShadow = true;
+            postInstances.receiveShadow = true;
+            scene.add(postInstances);
+
+            const lightInstanceGeometry = sharedLampLightGeometry.clone();
+            const lightInstances = new THREE.InstancedMesh(lightInstanceGeometry, lampLightMaterial, maxLights);
+            lightInstances.castShadow = false; // Lights themselves don't cast shadows
+            lightInstances.receiveShadow = false;
+            scene.add(lightInstances);
+
+            const dummyLamp = new THREE.Object3D(); // Dummy object for lamps
+            let postInstanceIndex = 0;
+            let lightInstanceIndex = 0;
+
+            // Helper function to set matrix for lamp instances
+            function setLampInstanceMatrix(instances, index, x, y, z) {
+                dummyLamp.position.set(x, y, z);
+                dummyLamp.updateMatrix();
+                instances.setMatrixAt(index, dummyLamp.matrix);
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                const roadZCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_col_idx = -numBlocks; block_col_idx < numBlocks; block_col_idx++) {
+                    const blockXStart = block_col_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const lampSpacing = blockSize / (lampsPerBlockLength + 1);
+                    for (let k = 1; k <= lampsPerBlockLength; k++) {
+                        const xPos = blockXStart + k * lampSpacing;
+                        if (xPos >= -actualCityRadius && xPos <= actualCityRadius) {
+                            // Lamp Post 1
+                            setLampInstanceMatrix(postInstances, postInstanceIndex++, xPos, 9, roadZCenter + lampOffsetFromRoadCenter);
+                            setLampInstanceMatrix(lightInstances, lightInstanceIndex++, xPos, 18 + 0.75, roadZCenter + lampOffsetFromRoadCenter);
+                            // Lamp Post 2
+                            setLampInstanceMatrix(postInstances, postInstanceIndex++, xPos, 9, roadZCenter - lampOffsetFromRoadCenter);
+                            setLampInstanceMatrix(lightInstances, lightInstanceIndex++, xPos, 18 + 0.75, roadZCenter - lampOffsetFromRoadCenter);
+                        }
+                    }
+                }
+            }
+
+            for (let road_idx = -numBlocks; road_idx <= numBlocks; road_idx++) {
+                const roadXCenter = road_idx * (blockSize + roadWidth) - roadWidth / 2;
+                for (let block_row_idx = -numBlocks; block_row_idx < numBlocks; block_row_idx++) {
+                    const blockZStart = block_row_idx * (blockSize + roadWidth) - roadWidth/2;
+                    const lampSpacing = blockSize / (lampsPerBlockLength + 1);
+                    for (let k = 1; k <= lampsPerBlockLength; k++) {
+                        const zPos = blockZStart + k * lampSpacing;
+                        if (zPos >= -actualCityRadius && zPos <= actualCityRadius) {
+                            // Lamp Post 3
+                            setLampInstanceMatrix(postInstances, postInstanceIndex++, roadXCenter + lampOffsetFromRoadCenter, 9, zPos);
+                            setLampInstanceMatrix(lightInstances, lightInstanceIndex++, roadXCenter + lampOffsetFromRoadCenter, 18 + 0.75, zPos);
+                            // Lamp Post 4
+                            setLampInstanceMatrix(postInstances, postInstanceIndex++, roadXCenter - lampOffsetFromRoadCenter, 9, zPos);
+                            setLampInstanceMatrix(lightInstances, lightInstanceIndex++, roadXCenter - lampOffsetFromRoadCenter, 18 + 0.75, zPos);
+                        }
+                    }
+                }
+            }
+            postInstances.instanceMatrix.needsUpdate = true;
+            lightInstances.instanceMatrix.needsUpdate = true;
         }
 
         function createStreetSigns() {
@@ -580,10 +781,13 @@
 
                     const ewSignGroup = new THREE.Group();
                     const ewPost = new THREE.Mesh(signPostGeometry.clone(), streetSignPoleMaterial);
+                    ewPost.castShadow = true;
                     ewPost.position.y = signPostHeight / 2;
                     const ewBoard = new THREE.Mesh(signBoardGeometry.clone(), streetSignBoardMaterial);
+                    ewBoard.castShadow = true;
                     ewBoard.position.y = signPostHeight - signBoardHeight / 2 - 0.5; 
                     const ewTextMesh = new THREE.Mesh(ewTextGeom, streetSignTextMaterial); 
+                    ewTextMesh.castShadow = false;
                     ewTextMesh.position.set(-ewTextWidth / 2, ewBoard.position.y - textSize * 0.4, signBoardDepth / 2 + textDepth * 0.1);
                     
                     ewSignGroup.add(ewPost, ewBoard, ewTextMesh);
@@ -598,10 +802,13 @@
 
                     const nsSignGroup = new THREE.Group();
                     const nsPost = new THREE.Mesh(signPostGeometry.clone(), streetSignPoleMaterial);
+                    nsPost.castShadow = true;
                     nsPost.position.y = signPostHeight / 2;
                     const nsBoard = new THREE.Mesh(signBoardGeometry.clone(), streetSignBoardMaterial);
+                    nsBoard.castShadow = true;
                     nsBoard.position.y = signPostHeight - signBoardHeight / 2 - 0.5;
                     const nsTextMesh = new THREE.Mesh(nsTextGeom, streetSignTextMaterial);
+                    nsTextMesh.castShadow = false;
                     nsTextMesh.position.set(-nsTextWidth / 2, nsBoard.position.y - textSize * 0.4, signBoardDepth / 2 + textDepth * 0.1);
 
                     nsSignGroup.add(nsPost, nsBoard, nsTextMesh);
@@ -641,7 +848,11 @@
             requestAnimationFrame(animate);
             const delta = clock.getDelta();
             const playerObject = controls.getObject();
-            const prevPosition = playerObject.position.clone(); 
+            const prevPosition = playerObject.position.clone();
+
+            // Update the global player collider box for this frame
+            updatePlayerColliderBox(playerObject.position, playerColliderBox);
+
 
             if (controls.isLocked) {
                 velocity.x -= velocity.x * 10.0 * delta;
@@ -665,9 +876,8 @@
 
                 for (const building of buildings) {
                     const buildingBox = building.boundingBox;
-                    let playerCollider = getPlayerCollider(playerObject.position); 
-
-                    if (playerCollider.intersectsBox(buildingBox)) {
+                    // Use the pre-updated playerColliderBox for intersection checks
+                    if (playerColliderBox.intersectsBox(buildingBox)) {
                         yCollisionResolvedThisLoop = false;
                         const prevFeetY = prevPosition.y - playerHeight;
                         const currentFeetY = playerObject.position.y - playerHeight; 
@@ -687,20 +897,26 @@
                             yCollisionResolvedThisLoop = true;
                         }
                         
-                        playerCollider = getPlayerCollider(playerObject.position);
-                        if (yCollisionResolvedThisLoop && !playerCollider.intersectsBox(buildingBox)) {
+                        // Update playerColliderBox again if player position was adjusted due to Y collision
+                        if(yCollisionResolvedThisLoop) {
+                            updatePlayerColliderBox(playerObject.position, playerColliderBox);
+                        }
+
+                        if (yCollisionResolvedThisLoop && !playerColliderBox.intersectsBox(buildingBox)) {
                              if(onSolidSurface) break; 
                              continue; 
                         }
                         
-                        if (playerCollider.intersectsBox(buildingBox) && !yCollisionResolvedThisLoop) {
+                        if (playerColliderBox.intersectsBox(buildingBox) && !yCollisionResolvedThisLoop) {
                             playerObject.position.x = prevPosition.x;
                             playerObject.position.z = prevPosition.z;
                             velocity.x = 0; 
                             velocity.z = 0; 
 
-                            playerCollider = getPlayerCollider(playerObject.position); 
-                            if (playerCollider.intersectsBox(buildingBox)) {
+                            // After XZ revert, update collider again before the final check
+                            updatePlayerColliderBox(playerObject.position, playerColliderBox);
+
+                            if (playerColliderBox.intersectsBox(buildingBox)) {
                                 const feetAtRevertedXZ = playerObject.position.y - playerHeight;
                                 if (velocity.y <= 0 && feetAtRevertedXZ <= buildingBox.max.y + 0.25 && feetAtRevertedXZ >= buildingBox.max.y - playerHeight * 0.5) {
                                     playerObject.position.y = buildingBox.max.y + playerHeight;
