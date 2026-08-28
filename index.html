@@ -1,569 +1,1578 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
-    <meta charset="UTF-8">
-    <title>Nipuna's Portfolio</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <style>
-        body {
-            margin: 0;
-            background: #111; /* Modern dark background */
-            color: #e0e0e0; /* Modern light text color */
-            font-family: 'Inter', sans-serif; /* Modern font */
-            display: flex;
-            flex-direction: column;
-            min-height: 100vh;
-            overflow-x: hidden;
-        }
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Local LLM Benchmarks — 16GB RX 9070 XT</title>
+<meta name="description" content="Measured throughput, VRAM fit, long-context recall, coding quality and quantisation fidelity for local LLMs on a single AMD RX 9070 XT (16GB) under llama.cpp + ROCm.">
+<style>
+:root{
+  color-scheme: dark;
+  --bg:#0b0d10;
+  --surface:#12151a;
+  --surface-2:#171b21;
+  --line:#242a33;
+  --line-soft:#1b2027;
+  --ink:#e8ebee;
+  --ink-2:#a7b0ba;
+  --ink-3:#6f7883;
+  --accent:#00ffcc;
+  --accent-dim:#0a3f38;
+  --s1:#3987e5;
+  --s2:#d95926;
+  --s3:#199e70;
+  --s4:#c98500;
+  --s5:#d55181;
+  --good:#199e70;
+  --bad:#e66767;
+  --warn:#c98500;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth;scroll-padding-top:64px}
+body{
+  margin:0;background:var(--bg);color:var(--ink);
+  font-family:var(--sans);font-size:16px;line-height:1.62;
+  -webkit-font-smoothing:antialiased;
+}
+html{overflow-x:clip}
 
-        /* Black Navigation Bar Style */
-        nav {
-            background-color: #000000; /* Black background */
-            padding: 5px 10px;
-            border-bottom: 2px solid #333333; /* Dark grey border */
-            width: 100%;
-            box-sizing: border-box;
-            z-index: 100;
-            flex-shrink: 0;
-            text-align: left;
-        }
+/* ---------- nav ---------- */
+nav{
+  position:sticky;top:0;z-index:200;background:#000;
+  border-bottom:1px solid var(--line);padding:8px 14px;
+}
+nav ul{list-style:none;margin:0;padding:0;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+nav a{
+  color:var(--ink-2);text-decoration:none;font-family:var(--mono);font-size:13px;
+  padding:5px 10px;border:1px solid var(--line);background:#14171c;border-radius:4px;
+  display:inline-block;transition:.18s ease;white-space:nowrap;
+}
+nav a:hover{background:#232830;color:#fff;border-color:#3a424e}
+nav a.active{background:var(--accent);color:#000;border-color:var(--accent);font-weight:600}
+nav a.ext::after{content:" ↗";opacity:.55}
+nav .spacer{flex:1 1 auto;min-width:0}
 
-        nav ul {
-            list-style: none;
-            padding: 0;
-            margin: 0;
-            display: inline-flex;
-        }
+/* ---------- layout ---------- */
+.wrap{max-width:1120px;margin:0 auto;padding:0 22px}
+section{padding:52px 0;border-top:1px solid var(--line-soft)}
+section:first-of-type{border-top:none}
+h1,h2,h3,h4{line-height:1.24;margin:0 0 .5em}
+h1{font-size:clamp(2.1rem,5.2vw,3.4rem);letter-spacing:-.02em;font-weight:700}
+h2{font-size:clamp(1.5rem,3vw,2rem);letter-spacing:-.015em;margin-top:0}
+h3{font-size:1.15rem;margin-top:2.2em;color:var(--ink)}
+h4{font-size:.95rem;margin-top:1.8em;color:var(--ink-2);font-family:var(--mono);font-weight:600}
+p{margin:0 0 1.05em;color:var(--ink-2);max-width:78ch}
+p strong,li strong{color:var(--ink);font-weight:600}
+a{color:var(--accent);text-decoration:none;border-bottom:1px solid rgba(0,255,204,.28)}
+a:hover{border-bottom-color:var(--accent)}
+ul,ol{color:var(--ink-2);max-width:78ch;padding-left:1.15em}
+li{margin:.35em 0}
+code{font-family:var(--mono);font-size:.86em;background:#1b2027;border:1px solid var(--line);
+  padding:1px 5px;border-radius:4px;color:#cfe7e2;white-space:nowrap}
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:.16em;text-transform:uppercase;
+  color:var(--accent);margin:0 0 14px;display:block}
+.lede{font-size:1.08rem;color:var(--ink-2);max-width:74ch}
+.note{border-left:2px solid var(--accent);background:linear-gradient(90deg,rgba(0,255,204,.05),transparent 70%);
+  padding:12px 16px;margin:1.4em 0;border-radius:0 6px 6px 0}
+.note p{margin:0;max-width:none;font-size:.95rem}
+.note.warn{border-left-color:var(--warn);background:linear-gradient(90deg,rgba(201,133,0,.08),transparent 70%)}
 
-        nav ul li {
-            margin-right: 10px;
-        }
+/* ---------- hero ---------- */
+header.hero{padding:72px 0 44px;position:relative;overflow:hidden}
+header.hero::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(900px 380px at 8% -10%,rgba(0,255,204,.09),transparent 62%);pointer-events:none}
+.hero-inner{position:relative}
+.hero h1 span{color:var(--accent)}
+.rig{font-family:var(--mono);font-size:13px;color:var(--ink-3);margin:18px 0 0;letter-spacing:.01em}
+.rig b{color:var(--ink-2);font-weight:500}
 
-        nav ul li a {
-            color: #e0e0e0; /* Light grey text for contrast */
-            text-decoration: none;
-            font-size: 16px;
-            font-family: "Times New Roman", Times, serif; /* 90s font for nav items */
-            padding: 5px 8px;
-            border: 1px solid #444444; /* Slightly lighter grey border for links */
-            background-color: #1a1a1a; /* Very dark grey for button feel on black */
-            display: inline-block;
-            transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
-        }
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));gap:12px;margin:34px 0 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.kpi .v{font-family:var(--mono);font-size:1.6rem;font-weight:600;color:var(--accent);line-height:1.1;letter-spacing:-.02em}
+.kpi .l{font-size:12px;color:var(--ink-3);margin-top:6px;line-height:1.4}
 
-        nav ul li a:hover {
-            background-color: #333333; /* Lighter grey on hover */
-            color: #ffffff; /* White text on hover */
-            text-decoration: none; /* Keep no underline or add if preferred */
-        }
+/* ---------- tables ---------- */
+.tw{overflow-x:auto;margin:1.4em 0;border:1px solid var(--line);border-radius:10px;background:var(--surface)}
+table{border-collapse:collapse;width:100%;font-size:13.5px;min-width:520px}
+caption{caption-side:top;text-align:left;padding:12px 16px 4px;font-size:12px;color:var(--ink-3);
+  font-family:var(--mono)}
+th,td{padding:9px 14px;text-align:left;border-bottom:1px solid var(--line-soft);vertical-align:top}
+thead th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:11.5px;
+  text-transform:uppercase;letter-spacing:.07em;white-space:nowrap;position:sticky;top:0}
+tbody tr:last-child td{border-bottom:none}
+tbody tr:hover{background:rgba(255,255,255,.022)}
+td.num,th.num{text-align:right;font-family:var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap}
+td.mono,th.mono{font-family:var(--mono);font-size:12.2px}
+.m{color:var(--ink);font-weight:600}
+.win{color:var(--accent);font-weight:600}
+.ok{color:var(--good);font-weight:600}
+.no{color:var(--bad);font-weight:600}
+.dim{color:var(--ink-3)}
+tr.hl td{background:rgba(0,255,204,.045)}
 
-        nav ul li a.active {
-            background-color: #00ffcc; /* Accent color for active link (modern touch) */
-            color: #000000; /* Black text for active link for contrast with accent */
-            border: 1px solid #00ffcc;
-        }
-        /* End of Black Navigation Bar Styles */
+/* ---------- code ---------- */
+pre{background:#0e1116;border:1px solid var(--line);border-radius:10px;padding:14px 16px;
+  overflow-x:auto;margin:1.2em 0;font-family:var(--mono);font-size:12.6px;line-height:1.65;color:#cfd8e3}
+pre code{background:none;border:none;padding:0;white-space:pre;color:inherit;font-size:inherit}
+.cmd-label{font-family:var(--mono);font-size:11.5px;color:var(--ink-3);text-transform:uppercase;
+  letter-spacing:.09em;margin:1.8em 0 -.4em}
 
+/* ---------- charts ---------- */
+figure{margin:1.6em 0;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:18px}
+figcaption{font-size:12.5px;color:var(--ink-3);margin-top:14px;line-height:1.5;max-width:82ch}
+.fig-title{font-size:14px;font-weight:600;color:var(--ink);margin:0 0 2px}
+.fig-sub{font-size:12px;color:var(--ink-3);font-family:var(--mono);margin:0 0 16px}
 
-        /* Container for the game canvas and messages - REVERTED TO MODERN */
-        .game-container {
-            flex-grow: 1;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            width: 100%;
-            position: relative;
-            overflow: hidden;
-            padding: 20px; /* Modern padding */
-            box-sizing: border-box;
-            background-color: #111; /* Modern dark background for game area */
-        }
+.bars{display:grid;gap:9px}
+.bar-row{display:grid;grid-template-columns:minmax(120px,230px) minmax(0,1fr) minmax(96px,max-content);gap:14px;align-items:center}
+.bar-lab{font-size:12.4px;color:var(--ink-2);text-align:right;font-family:var(--mono);line-height:1.35}
+.bar-lab b{color:var(--ink);font-weight:600}
+.bar-track{position:relative;height:22px;background:#0e1116;border-radius:4px;overflow:hidden;min-width:0}
+.bar-fill{height:100%;border-radius:2px 4px 4px 2px;background:var(--s1);transition:filter .15s}
+.bar-row:hover .bar-fill{filter:brightness(1.18)}
+.bar-val{font-family:var(--mono);font-size:12px;color:var(--ink);white-space:nowrap;
+  font-variant-numeric:tabular-nums;text-align:left}
+.bars.gauge .bar-track{background:#2a313b}
 
-        /* Canvas style - REVERTED TO MODERN */
-        canvas {
-            border: 4px solid #fff; /* Modern border */
-            background: #222; /* Modern canvas background */
-            max-width: 100%;
-            max-height: 100%;
-            display: block;
-            opacity: 0;
-            transition: opacity 1s ease-in-out;
-            object-fit: contain;
-        }
+.stack{display:flex;height:22px;gap:2px;background:#0e1116;border-radius:4px;padding:0;overflow:hidden}
+.stack i{display:block;height:100%}
+.legend{display:flex;flex-wrap:wrap;gap:16px;margin:2px 0 16px;font-size:12.4px;color:var(--ink-2);
+  font-family:var(--mono)}
+.legend span{display:inline-flex;align-items:center;gap:7px}
+.legend b{width:11px;height:11px;border-radius:3px;display:inline-block}
+svg.chart{width:100%;height:auto;display:block;overflow:visible}
+svg text{font-family:var(--mono);fill:var(--ink-3);font-size:11px}
+svg text.lab{fill:var(--ink-2);font-size:11.5px}
+svg .grid{stroke:var(--line-soft);stroke-width:1}
+svg .axis{stroke:var(--line);stroke-width:1}
+svg circle.pt{stroke:var(--surface);stroke-width:2}
 
-        /* Game Message style - REVERTED TO MODERN */
-        #gameMessage {
-            position: fixed;
-            top: 60px; /* Adjusted to be below nav, leaving some space */
-            left: 50%;
-            transform: translateX(-50%);
-            background: rgba(0, 0, 0, 0.85); /* Modern background */
-            color: white; /* Modern text color */
-            padding: 12px 22px; /* Modern padding */
-            border: 1px solid white; /* Modern border */
-            border-radius: 8px; /* Modern border-radius */
-            opacity: 0;
-            transition: opacity 0.5s ease-in-out;
-            z-index: 110;
-            font-size: 1em; /* Modern font size */
-            white-space: nowrap;
-            box-shadow: 0 4px 15px rgba(0,0,0,0.5); /* Modern shadow */
-        }
+/* ---------- cards ---------- */
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:14px;margin:1.5em 0}
+.card{background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:16px 18px}
+.card h4{margin:0 0 8px;color:var(--accent);font-size:12px;letter-spacing:.09em;text-transform:uppercase}
+.card p{margin:0;font-size:13.6px;max-width:none}
+.card .big{font-family:var(--mono);font-size:1.25rem;color:var(--ink);font-weight:600;display:block;margin-bottom:4px}
 
-        /* Tooltip Message style - REVERTED TO MODERN */
-        #tooltipMessage {
-            position: absolute;
-            background: rgba(0, 0, 0, 0.9); /* Modern background */
-            color: white; /* Modern text color */
-            padding: 6px 12px; /* Modern padding */
-            border: 1px solid white; /* Modern border */
-            border-radius: 5px; /* Modern border-radius */
-            pointer-events: none;
-            z-index: 120;
-            display: none;
-            white-space: nowrap;
-            font-size: 0.9em; /* Modern font size */
-            box-shadow: 0 2px 10px rgba(0,0,0,0.4); /* Modern shadow */
-        }
+/* ---------- toc ---------- */
+.toc{display:flex;flex-wrap:wrap;gap:8px;margin:26px 0 0}
+.toc a{font-family:var(--mono);font-size:12px;color:var(--ink-2);border:1px solid var(--line);
+  background:var(--surface);padding:5px 10px;border-radius:20px;transition:.18s}
+.toc a:hover{border-color:var(--accent);color:var(--accent)}
 
-        /* Styles for the intro messages - REVERTED TO MODERN */
-        .intro-message {
-            position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            color: white; /* Modern text color */
-            font-family: 'Inter', sans-serif; /* Modern font */
-            font-size: clamp(2em, 5vw, 3em); /* Modern responsive font size */
-            opacity: 0;
-            transition: opacity 1s ease-in-out;
-            z-index: 20;
-            text-align: center;
-            pointer-events: none;
-            text-shadow: none; /* No shadow for modern look */
-        }
-    </style>
+footer{border-top:1px solid var(--line);padding:40px 0 60px;color:var(--ink-3);font-size:13.5px}
+footer a{color:var(--ink-2);border-bottom-color:var(--line)}
+footer a:hover{color:var(--accent)}
+.foot-links{display:flex;flex-wrap:wrap;gap:10px;margin:16px 0 0}
+.foot-links a{font-family:var(--mono);font-size:12.5px;border:1px solid var(--line);background:var(--surface);
+  padding:7px 12px;border-radius:6px;color:var(--ink-2)}
+.foot-links a:hover{border-color:var(--accent);color:var(--accent)}
+
+@media(max-width:720px){
+  body{font-size:15px}
+  section{padding:40px 0}
+  code{white-space:normal;overflow-wrap:anywhere}
+  .bar-row{grid-template-columns:1fr auto;gap:4px 10px}
+  .bar-lab{text-align:left;grid-column:1 / -1}
+  .bar-val{font-size:11.5px}
+}
+</style>
 </head>
-
 <body>
-    <nav>
-        <ul>
-            <li><a href="index.html" class="active">Home</a></li>
-            <li><a href="projects/index.html">VIBE CODED WORLD</a></li>
-        </ul>
-    </nav>
 
-    <div class="game-container">
-        <div id="introMessage1" class="intro-message">hello</div>
-        <div id="introMessage2" class="intro-message">let's play a game</div>
-        <canvas id="mazeCanvas" width="600" height="600"></canvas> <div id="tooltipMessage"></div>
+<nav>
+  <ul>
+    <li><a href="index.html" class="active">BENCHMARKS</a></li>
+    <li><a href="maze/index.html">MAZE</a></li>
+    <li><a href="projects/index.html">VIBE CODED WORLD</a></li>
+    <li class="spacer"></li>
+    <li><a class="ext" href="https://www.linkedin.com/in/nipuna-h-herath/" target="_blank" rel="noopener">LINKEDIN</a></li>
+    <li><a class="ext" href="https://github.com/kr4ckhe4d" target="_blank" rel="noopener">GITHUB</a></li>
+    <li><a class="ext" href="https://www.instagram.com/kr4ckhe4d/" target="_blank" rel="noopener">ABOUT ME</a></li>
+  </ul>
+</nav>
+
+<header class="hero">
+  <div class="wrap hero-inner">
+    <span class="eyebrow">CachyPC · single-GPU local inference lab</span>
+    <h1>Local LLM benchmarks on <span>16 GB</span> of consumer AMD</h1>
+    <p class="lede">
+      Every number on this page was measured on one desktop — a Radeon RX 9070 XT with
+      16,304 MiB of VRAM — running <code>llama.cpp b10463</code> against the ROCm backend.
+      Throughput, VRAM fit, long-context recall, tool calling, coding quality and
+      KL-divergence against unquantised weights, for seventeen models. Configurations that
+      failed are recorded next to the ones that worked, because a rejected row is the part
+      that saves you the afternoon.
+    </p>
+    <p class="rig">
+      <b>GPU</b> RX 9070 XT · Navi 48 · gfx1201 · RDNA4 · 16,304 MiB &nbsp;|&nbsp;
+      <b>CPU</b> Ryzen 9 5950X 16C/32T &nbsp;|&nbsp;
+      <b>RAM</b> 64 GB DDR4-3200 &nbsp;|&nbsp;
+      <b>OS</b> CachyOS 7.1.5 &nbsp;|&nbsp;
+      <b>ROCm</b> 7.2.53211 &nbsp;|&nbsp;
+      <b>llama.cpp</b> b10463 (<code>7c35571e5</code>)
+    </p>
+
+    <div class="kpis">
+      <div class="kpi"><div class="v">17</div><div class="l">models measured, MoE / dense / hybrid / Mamba2 / MLA</div></div>
+      <div class="kpi"><div class="v">1,048,576</div><div class="l">largest context served — natively trained, not YaRN-stretched</div></div>
+      <div class="kpi"><div class="v">2.1×</div><div class="l">ROCm prompt throughput over Vulkan on K-quants</div></div>
+      <div class="kpi"><div class="v">13×</div><div class="l">KLD gap between Q6_K and Q3_K_XL against BF16</div></div>
+      <div class="kpi"><div class="v">2.40×</div><div class="l">generation from the MTP head llama.cpp discards by default</div></div>
     </div>
-    <div id="gameMessage"></div>
 
-    <script>
-        const MazeGame = {};
+    <div class="toc">
+      <a href="#backend">Backend</a>
+      <a href="#attention">Attention topology</a>
+      <a href="#inventory">Models</a>
+      <a href="#configs">Verified configs</a>
+      <a href="#throughput">Throughput</a>
+      <a href="#recall">Long-context recall</a>
+      <a href="#coding">Coding quality</a>
+      <a href="#kld">Quant fidelity</a>
+      <a href="#knowledge">Library knowledge</a>
+      <a href="#tools">Tool calling</a>
+      <a href="#tuning">Tuning</a>
+      <a href="#commands">Commands</a>
+      <a href="#harness">Agentic harnesses</a>
+      <a href="#verdict">What to run</a>
+      <a href="#caveats">Caveats</a>
+    </div>
+  </div>
+</header>
 
-        MazeGame.canvas = document.getElementById('mazeCanvas');
-        MazeGame.ctx = MazeGame.canvas.getContext('2d');
-        MazeGame.gameMessage = document.getElementById('gameMessage');
-        MazeGame.tooltipMessage = document.getElementById('tooltipMessage');
-        MazeGame.introMessage1 = document.getElementById('introMessage1');
-        MazeGame.introMessage2 = document.getElementById('introMessage2');
-        MazeGame.gameContainer = document.querySelector('.game-container');
+<main class="wrap">
 
-        MazeGame.cols = 15; // Fixed number of columns
-        MazeGame.rows = 15; // Fixed number of rows
+<!-- ============ HARDWARE ============ -->
+<section id="hardware">
+  <span class="eyebrow">01 — The machine</span>
+  <h2>The hardware is the argument</h2>
+  <p>
+    Sixteen gigabytes is the binding constraint on everything below. Every <code>-ncmoe</code>,
+    every KV quantisation choice and every <code>-ub</code> value is bought against it. The rest
+    of the box matters because expert layers that don't fit on the card get streamed from DDR4 at
+    ~40 GB/s instead of read from VRAM at ~640 GB/s.
+  </p>
 
-        MazeGame.maze = [];
-        MazeGame.player = { x: 0, y: 0 };
-        MazeGame.eggs = [];
+  <div class="tw">
+    <table>
+      <caption>Machine under test — VRAM read from <code>/sys/class/drm/card1/device/mem_info_vram_used</code></caption>
+      <thead><tr><th>Component</th><th>Spec</th><th>Why it shows up in the results</th></tr></thead>
+      <tbody>
+        <tr><td class="m">GPU</td><td class="mono">RX 9070 XT · Navi 48 · gfx1201 · RDNA4 · 16,304 MiB</td><td>The binding constraint on this entire page</td></tr>
+        <tr><td class="m">CPU</td><td class="mono">Ryzen 9 5950X · 16C/32T · 64 MiB L3 · 5.09 GHz</td><td>Runs CPU-offloaded expert layers. <code>-t 32</code> collapses generation to 23.6 ± 4.6 tok/s on SMT contention — leave threads at 16</td></tr>
+        <tr><td class="m">RAM</td><td class="mono">64 GB DDR4-3200 · 4 × 16 GB · dual channel</td><td>~40 GB/s ceiling on every <code>-ncmoe</code> row. Two mismatched kits; the 3600 pair is downclocked to the 3200 SPD</td></tr>
+        <tr><td class="m">Storage</td><td class="mono">Crucial BX500 1 TB — SATA, ~540 MB/s</td><td>Not NVMe. Cold loads cost ~93 s for a 49 GB model, ~30 s for 12.5 GB. Idle-sleep reloads pay it again</td></tr>
+        <tr><td class="m">OS</td><td class="mono">CachyOS · kernel 7.1.5</td><td class="dim">—</td></tr>
+        <tr><td class="m">ROCm</td><td class="mono">7.2.53211 · <code>GGML_HIP=ON</code> · <code>AMDGPU_TARGETS=gfx1201</code></td><td>Wins K-quants by 1.7–2.1× on prompt processing</td></tr>
+        <tr><td class="m">llama.cpp</td><td class="mono">b10463 · <code>7c35571e5</code> · 2026-08-17</td><td>Tool calling was broken on <code>e583f3b4f</code> and is fixed here</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-        MazeGame.touchStartX = 0;
-        MazeGame.touchStartY = 0;
-        MazeGame.swipeThreshold = 30; // Modern threshold
-        MazeGame.gameActive = false;
+  <div class="note">
+    <p><strong>A BIOS update changes none of it — measured.</strong> Board moved from BIOS 2407 (2021)
+    to 3636 (2026), roughly four and a half years of AGESA updates. Memory still trains at 3200 on all
+    four DIMMs, and Qwen3.6 re-run under identical conditions moved within noise: prompt up 1–2 %,
+    generation down 1–2 %, both directions. 3200 is not a firmware limitation, it is what four mostly
+    dual-rank DIMMs across two kits will do on this memory controller.</p>
+  </div>
+</section>
 
-        MazeGame.Cell = class Cell {
-            constructor(x, y) {
-                this.x = x;
-                this.y = y;
-                this.walls = { top: true, right: true, bottom: true, left: true };
-                this.visited = false;
-            }
+<!-- ============ BACKEND ============ -->
+<section id="backend">
+  <span class="eyebrow">02 — Backend</span>
+  <h2>ROCm for everything, and why Vulkan was retired</h2>
+  <p>
+    Measured head-to-head with <code>llama-bench</code>, <code>-fa 1</code> throughout.
+    <code>llama-bench</code> defaults flash attention <em>off</em>, but <code>llama-server</code>
+    resolves <code>auto → enabled</code>, so <code>-fa 0</code> numbers do not describe real serving —
+    an earlier revision of this record got that wrong.
+  </p>
 
-            getNeighbors() {
-                const neighbors = [];
-                const directions = [
-                    { dx: 0, dy: -1, wall1: 'top', wall2: 'bottom' },
-                    { dx: 1, dy: 0, wall1: 'right', wall2: 'left' },
-                    { dx: 0, dy: 1, wall1: 'bottom', wall2: 'top' },
-                    { dx: -1, dy: 0, wall1: 'left', wall2: 'right' }
-                ];
-                for (const dir of directions) {
-                    const nx = this.x + dir.dx;
-                    const ny = this.y + dir.dy;
-                    if (nx >= 0 && ny >= 0 && nx < MazeGame.cols && ny < MazeGame.rows) {
-                        const neighbor = MazeGame.maze[ny][nx];
-                        if (neighbor && !neighbor.visited) {
-                            neighbors.push({ cell: neighbor, wall1: dir.wall1, wall2: dir.wall2 });
-                        }
-                    }
-                }
-                return neighbors;
-            }
-        }
+  <div class="tw">
+    <table>
+      <caption>ROCm vs Vulkan — prompt tok/s / generation tok/s</caption>
+      <thead><tr><th>Model</th><th>Quant</th><th class="num">ROCm pp / tg</th><th class="num">Vulkan pp / tg</th><th>Use</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Qwen3.6-35B-A3B <span class="dim">(-ncmoe 40 -ub 512)</span></td><td class="mono">Q4_K_M</td><td class="num"><span class="win">706.0</span> / —</td><td class="num">333.4 / 29.3</td><td class="mono">ROCm</td></tr>
+        <tr><td class="m">Gemma 4-26B-A4B <span class="dim">(-ncmoe 8)</span></td><td class="mono">Q4_K_M</td><td class="num"><span class="win">1949.9</span> / <span class="win">50.3</span></td><td class="num">1064.7 / 48.0</td><td class="mono">ROCm</td></tr>
+        <tr><td class="m">GPT-OSS-20B <span class="dim">shallow</span></td><td class="mono">MXFP4</td><td class="num"><span class="win">5529.9</span> / 148.5</td><td class="num">4952.0 / <span class="win">180.8</span></td><td class="mono dim">was Vulkan</td></tr>
+        <tr><td class="m">GPT-OSS-20B <span class="dim">@131k depth</span></td><td class="mono">MXFP4</td><td class="num">1035.2 / <span class="win">70.5</span></td><td class="num"><span class="win">1063.7</span> / <span class="no">22.3</span></td><td class="mono">ROCm</td></tr>
+        <tr><td class="m">Qwen3.8-27B <span class="dim">dense, -ngl 99</span></td><td class="mono">Q3_K_XL</td><td class="num"><span class="win">1329.4</span> / <span class="win">30.64</span></td><td class="num">1161.8 / 16.91</td><td class="mono">ROCm</td></tr>
+        <tr><td class="m">Laguna XS.2 33B-A3B <span class="dim">(-ncmoe 16)</span></td><td class="mono">Q4_K_M</td><td class="num"><span class="win">1244.4</span> / <span class="win">55.28</span></td><td class="num">661.7 / 48.19</td><td class="mono">ROCm</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-        MazeGame.generateMaze = function(current) {
-            current.visited = true;
-            let S = [];
-            S.push(current);
-            while (S.length > 0) {
-                let c = S[S.length - 1];
-                const neighbors = c.getNeighbors().filter(n => n.cell && !n.cell.visited);
-                if (neighbors.length > 0) {
-                    const { cell: nextCell, wall1, wall2 } = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    c.walls[wall1] = false;
-                    nextCell.walls[wall2] = false;
-                    nextCell.visited = true;
-                    S.push(nextCell);
-                } else {
-                    S.pop();
-                }
-            }
-        }
+  <div class="cards">
+    <div class="card"><h4>K-quants</h4><p><span class="big">1.8–2.1×</span>ROCm wins prompt unambiguously, and wins generation too once flash attention is on (Gemma 50.3 vs 48.0).</p></div>
+    <div class="card"><h4>MXFP4, shallow</h4><p><span class="big">57 pp : 1 tg</span>The crossover ratio. Below it Vulkan was faster overall; above it ROCm. One preset ever collected that advantage.</p></div>
+    <div class="card"><h4>MXFP4, at depth</h4><p><span class="big">3.2×</span>Vulkan's generation collapses to 22.3 tok/s at 131k under VRAM pressure. ROCm holds 70.5 at the same prompt speed.</p></div>
+  </div>
 
-        MazeGame.setupMaze = function() {
-            MazeGame.maze = [];
-            MazeGame.eggs = [];
-            for (let y = 0; y < MazeGame.rows; y++) {
-                MazeGame.maze[y] = [];
-                for (let x = 0; x < MazeGame.cols; x++) {
-                    MazeGame.maze[y][x] = new MazeGame.Cell(x, y);
-                }
-            }
-            if (MazeGame.maze[0] && MazeGame.maze[0][0]) {
-                MazeGame.generateMaze(MazeGame.maze[0][0]);
-            } else {
-                console.error("Maze starting cell undefined.");
-                return;
-            }
+  <p>
+    Vulkan's only remaining advantage was shallow MXFP4 generation on exactly one preset, and
+    router mode always spawned children from the ROCm binary — so in daily use that advantage was
+    never actually being collected. <code>build-vulkan/</code> was dropped on 2026-08-17, trading
+    18 % of shallow generation on one preset for a single backend with no version skew. It has been
+    rebuilt twice since, from the same checkout, to spot-check new models: Qwen3.8-27B gives ROCm
+    <strong>+81 % generation</strong> and Laguna XS.2 gives it <strong>+88 % prompt</strong> — the
+    widest gaps in the table. The routing decision holds.
+  </p>
+</section>
 
-            const deadEnds = [];
-            for (let y = 0; y < MazeGame.rows; y++) {
-                for (let x = 0; x < MazeGame.cols; x++) {
-                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
-                    const cell = MazeGame.maze[y][x];
-                    const closedWalls = Object.values(cell.walls).filter(w => w).length;
-                    if (closedWalls >= 3 && !(x === 0 && y === 0)) {
-                        deadEnds.push({ x, y });
-                    }
-                }
-            }
-            for (let i = deadEnds.length - 1; i > 0; i--) {
-                const j = Math.floor(Math.random() * (i + 1));
-                [deadEnds[i], deadEnds[j]] = [deadEnds[j], deadEnds[i]];
-            }
+<!-- ============ ATTENTION ============ -->
+<section id="attention">
+  <span class="eyebrow">03 — Why long context fits at all</span>
+  <h2>Attention topology, not parameter count</h2>
+  <p>
+    Three models here are <strong>hybrid attention</strong>: <code>full_attention_interval = 4</code>
+    means only every 4th layer keeps a KV cache, the rest carry a constant-size recurrent state that
+    does not grow with context. That is the whole reason 1M fits in 16 GB. But hybrid attention is
+    not by itself a promise of cheap context — read <code>head_count_kv</code> and
+    <code>block_count</code> alongside the interval.
+  </p>
 
-            const eggData = [
-                { tooltip: 'LinkedIn', url: 'https://www.linkedin.com/in/nipuna-h-herath/', icon: 'linkedin' },
-                { tooltip: 'GitHub', url: 'https://github.com/kr4ckhe4d', icon: 'github' },
-                { tooltip: 'Instagram (About Me)', url: 'https://www.instagram.com/kr4ckhe4d/', icon: 'profile' }
-            ];
+  <div class="tw">
+    <table>
+      <caption>KV cost per token — the number that decides long-context viability</caption>
+      <thead><tr><th>Model</th><th class="num">Layers</th><th class="num">Layers with KV</th><th class="num">KV heads</th><th class="num">B / token (q8_0)</th><th class="num">KV @1M</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td class="m">Nemotron-3-Nano-30B-A3B</td><td class="num">52</td><td class="num">6</td><td class="num">2</td><td class="num win">3,264</td><td class="num">3,264 MiB</td></tr>
+        <tr><td class="m">Qwen3.6-35B-A3B</td><td class="num">40</td><td class="num">10</td><td class="num">2</td><td class="num">10,880</td><td class="num">10,880 MiB</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next</td><td class="num">48</td><td class="num">12</td><td class="num">2</td><td class="num">13,056</td><td class="num">13,056 MiB</td></tr>
+        <tr><td class="m">Qwen3.5-9B-Uncensored</td><td class="num">32</td><td class="num">8</td><td class="num">4</td><td class="num">17,408</td><td class="num dim">—</td></tr>
+        <tr><td class="m">GLM-4.7-Flash <span class="dim">(MLA)</span></td><td class="num">47</td><td class="num">47</td><td class="num dim">latent 576</td><td class="num">≈27,915</td><td class="num dim">—</td></tr>
+        <tr><td class="m">Qwen3.8-27B</td><td class="num">64</td><td class="num">16</td><td class="num">4</td><td class="num">34,816</td><td class="num">34,816 MiB</td></tr>
+        <tr><td class="m">Qwen3-Coder-30B-A3B</td><td class="num">48</td><td class="num">48</td><td class="num">4</td><td class="num">52,224</td><td class="num no">~52 GB</td></tr>
+        <tr><td class="m">Devstral Small 2 24B</td><td class="num">40</td><td class="num">40</td><td class="num">8</td><td class="num no">87,040</td><td class="num dim">unreachable</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-            MazeGame.eggs = deadEnds.slice(0, Math.min(3, deadEnds.length, eggData.length)).map((pos, i) => ({
-                ...pos,
-                tooltip: eggData[i].tooltip,
-                url: eggData[i].url,
-                icon: eggData[i].icon
-            }));
+  <div class="note">
+    <p><strong>Qwen3.8-27B is the counter-example that matters.</strong> Same
+    <code>full_attention_interval = 4</code>, but 4 KV heads instead of 2 and 64 layers instead of
+    40–48 — so 16 layers cache at double the per-layer cost. Confirmed exactly, not estimated:
+    asking for 131,072 tokens of q8_0 KV fails with
+    <code>failed to allocate ROCm0 buffer of size 4563402752</code>, which is 4,352 MiB,
+    precisely 16 × 4 × 256 × 2 × 1.0625 × 131072.</p>
+  </div>
 
-            if (MazeGame.eggs.length < 3) {
-                const occupiedSpots = new Set(MazeGame.eggs.map(e => `${e.x},${e.y}`));
-                if (!(MazeGame.player.x === 0 && MazeGame.player.y === 0)) occupiedSpots.add("0,0");
-                const potentialSpots = [
-                    {x: MazeGame.cols - 1, y: MazeGame.rows - 1}, {x: 0, y: MazeGame.rows - 2}, {x: MazeGame.cols - 2, y: 0},
-                    {x: 1, y: 1}, {x: MazeGame.cols-2, y: MazeGame.rows-2}
-                ];
-                for (let i = MazeGame.eggs.length; i < Math.min(3, eggData.length); i++) {
-                    for (const spot of potentialSpots) {
-                         const key = `${spot.x},${spot.y}`;
-                         if (spot.x < MazeGame.cols && spot.y < MazeGame.rows && !occupiedSpots.has(key)) {
-                            MazeGame.eggs.push({
-                                ...spot,
-                                tooltip: eggData[i % eggData.length].tooltip,
-                                url: eggData[i % eggData.length].url,
-                                icon: eggData[i % eggData.length].icon
-                            });
-                            occupiedSpots.add(key);
-                            if (MazeGame.eggs.length >=3) break;
-                         }
-                    }
-                     if (MazeGame.eggs.length >=3) break;
-                }
-            }
-            MazeGame.player = { x: 0, y: 0 };
-        }
+  <p>
+    <strong>MLA compression beats sparsity.</strong> GLM-4.7-Flash caches a single compressed latent
+    per layer rather than per-head K and V — 576 elements per layer per token, applied at
+    <em>every</em> layer. Measured empirically at ≈27,915 B/token, within 3 % of the formula, and
+    still cheaper than Qwen3.8's sparse-but-fat 34,816.
+  </p>
+</section>
 
-        MazeGame.drawPlayer = function(currentCellWidth, currentCellHeight) {
-            MazeGame.ctx.beginPath();
-            MazeGame.ctx.arc(
-                MazeGame.player.x * currentCellWidth + currentCellWidth / 2,
-                MazeGame.player.y * currentCellHeight + currentCellHeight / 2,
-                Math.min(currentCellWidth, currentCellHeight) / 3.5,
-                0, Math.PI * 2
-            );
-            MazeGame.ctx.fillStyle = '#00ffcc';
-            MazeGame.ctx.fill();
-            MazeGame.ctx.strokeStyle = '#111';
-            MazeGame.ctx.lineWidth = 2;
-        }
+<!-- ============ INVENTORY ============ -->
+<section id="inventory">
+  <span class="eyebrow">04 — Inventory</span>
+  <h2>Seventeen models</h2>
+  <p>
+    Everything that has been through the suite. Rows marked <span class="dim">deleted</span> are no
+    longer on disk — their measurements stand, and each was removed for a stated reason rather than
+    quietly dropped.
+  </p>
 
-        MazeGame.drawEggs = function(currentCellWidth, currentCellHeight) {
-            MazeGame.eggs.forEach(egg => {
-                const eggX = egg.x * currentCellWidth + currentCellWidth / 2;
-                const eggY = egg.y * currentCellHeight + currentCellHeight / 2;
-                const iconSizeBase = Math.min(currentCellWidth, currentCellHeight);
+  <div class="tw">
+    <table>
+      <caption>Model inventory — total / active parameters, architecture, quant, file size</caption>
+      <thead><tr><th>Model</th><th class="num">Total</th><th class="num">Active</th><th>Type</th><th>Quant</th><th class="num">Size</th><th>Disk</th></tr></thead>
+      <tbody>
+        <tr><td class="m">GPT-OSS-20B</td><td class="num">21B</td><td class="num">~3.6B</td><td>MoE</td><td class="mono">MXFP4</td><td class="num">11.3 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.6-35B-A3B</td><td class="num">35B</td><td class="num">~3B</td><td>MoE hybrid, 40L</td><td class="mono">UD-Q4_K_M</td><td class="num">20.6 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Gemma 4-26B-A4B</td><td class="num">25.2B</td><td class="num">~3.8B</td><td>MoE, 30L</td><td class="mono">UD-Q4_K_M</td><td class="num">15.8 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Gemma 4-E2B</td><td class="num">~4.66B</td><td class="num">~4.66B</td><td>Dense, 35L</td><td class="mono">BF16</td><td class="num">9.3 GB</td><td class="dim">deleted</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next</td><td class="num">80B</td><td class="num">~3B</td><td>MoE hybrid, 48L</td><td class="mono">UD-Q4_K_M</td><td class="num">49.3 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Muse Glimmer 30B</td><td class="num">30B</td><td class="num">30B</td><td>Dense SWA, 52L</td><td class="mono">UD-Q3_K_XL</td><td class="num">12.4 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.8-27B</td><td class="num">27B</td><td class="num">27B</td><td>Dense hybrid, 64L</td><td class="mono">UD-Q3_K_XL <span class="dim">(Dyn 2.0)</span></td><td class="num">12.5 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.8-27B</td><td class="num">27B</td><td class="num">27B</td><td>Dense hybrid, 64L</td><td class="mono">UD-Q3_K_XL <span class="dim">(Dyn 3.0)</span></td><td class="num">12.2 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.8-27B</td><td class="num">27B</td><td class="num">27B</td><td>Dense hybrid, 64L</td><td class="mono">UD-IQ4_XS</td><td class="num">13.3 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.8-27B</td><td class="num">27B</td><td class="num">27B</td><td>Dense hybrid, 64L</td><td class="mono">UD-IQ3_XXS</td><td class="num">10.2 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.5-27B-Uncensored</td><td class="num">26.9B</td><td class="num">26.9B</td><td>Dense hybrid, 64L</td><td class="mono">Q3_K_M</td><td class="num">12.4 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Qwen3.5-9B-Uncensored</td><td class="num">8.95B</td><td class="num">8.95B</td><td>Dense hybrid, 32L</td><td class="mono">Q8_0</td><td class="num">8.9 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">GLM-4.7-Flash</td><td class="num">30B</td><td class="num">~3B</td><td>MoE MLA, 47L</td><td class="mono">UD-Q4_K_XL</td><td class="num">16.3 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Laguna XS.2 <span class="dim">(Poolside)</span></td><td class="num">33B</td><td class="num">~3B</td><td>MoE hybrid + SWA, 40L</td><td class="mono">Q4_K_M / Q8_0</td><td class="num">18.9 / 33 GB</td><td class="ok">yes</td></tr>
+        <tr><td class="m">Nemotron-3-Nano-30B-A3B</td><td class="num">31.6B</td><td class="num">~3.5B</td><td>MoE Mamba2 hybrid, 52L</td><td class="mono">UD-Q4_K_XL</td><td class="num">22.8 GB</td><td class="dim">deleted</td></tr>
+        <tr><td class="m">Devstral Small 2 24B</td><td class="num">23.6B</td><td class="num">23.6B</td><td>Dense full-attn, 40L</td><td class="mono">Q4_K_M</td><td class="num">14.3 GB</td><td class="dim">deleted</td></tr>
+        <tr><td class="m">Instella-MoE-16B-A3B-Think</td><td class="num">15.86B</td><td class="num">~3B</td><td>MoE, fork-only arch</td><td class="mono">Q4_K_M</td><td class="num">9.75 GB</td><td class="dim">deleted</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-                MazeGame.ctx.beginPath();
-                MazeGame.ctx.arc(eggX, eggY, iconSizeBase / 3, 0, Math.PI * 2);
-                MazeGame.ctx.fillStyle = 'gold';
-                MazeGame.ctx.fill();
-                MazeGame.ctx.strokeStyle = '#DAA520';
-                MazeGame.ctx.lineWidth = 1.5;
-                MazeGame.ctx.stroke();
+  <p class="dim" style="font-size:13.5px">
+    Also measured and since removed: Qwen3-Coder-30B-A3B (Q8_0, 32.5 GB), Qwen2.5-Coder-14B and
+    -32B, GPT-OSS-120B (MXFP4, 59 GB).
+  </p>
+</section>
 
-                MazeGame.ctx.fillStyle = '#333';
-                MazeGame.ctx.textAlign = 'center';
-                MazeGame.ctx.textBaseline = 'middle';
-                const iconFontSize = iconSizeBase / 2.8;
+<!-- ============ CONFIGS ============ -->
+<section id="configs">
+  <span class="eyebrow">05 — Verified configs</span>
+  <h2>What actually loads, and the flags it takes</h2>
+  <p>
+    Every row below was <strong>actually loaded</strong>, confirmed to reach
+    <code>server is listening</code>, with VRAM read while resident. All include
+    <code>-ngl 99</code> unless noted. Contexts are exact token counts, not rounded labels.
+  </p>
 
-                switch (egg.icon) {
-                    case 'linkedin':
-                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
-                        MazeGame.ctx.fillText("in", eggX, eggY + iconFontSize * 0.05);
-                        break;
-                    case 'github':
-                        const headRadius = iconSizeBase / 7;
-                        const bodyWidth = iconSizeBase / 3.5;
-                        const bodyHeight = iconSizeBase / 4.5;
-                        MazeGame.ctx.beginPath();
-                        MazeGame.ctx.arc(eggX, eggY - headRadius / 1.5, headRadius, 0, Math.PI * 2);
-                        MazeGame.ctx.fill();
-                        MazeGame.ctx.fillRect(eggX - bodyWidth / 2, eggY, bodyWidth, bodyHeight);
-                        MazeGame.ctx.beginPath();
-                        MazeGame.ctx.moveTo(eggX - headRadius, eggY - headRadius * 1.5);
-                        MazeGame.ctx.lineTo(eggX - headRadius / 2, eggY - headRadius * 2.5);
-                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
-                        MazeGame.ctx.fill();
-                        MazeGame.ctx.beginPath();
-                        MazeGame.ctx.moveTo(eggX + headRadius, eggY - headRadius * 1.5);
-                        MazeGame.ctx.lineTo(eggX + headRadius / 2, eggY - headRadius * 2.5);
-                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
-                        MazeGame.ctx.fill();
-                        break;
-                    case 'profile':
-                        const pHeadRadius = iconSizeBase / 6;
-                        const pShoulderY = eggY + pHeadRadius / 1.5;
-                        const pShoulderWidth = iconSizeBase / 3;
-                        MazeGame.ctx.beginPath();
-                        MazeGame.ctx.arc(eggX, eggY - pHeadRadius / 2, pHeadRadius, 0, Math.PI * 2);
-                        MazeGame.ctx.fill();
-                        MazeGame.ctx.beginPath();
-                        MazeGame.ctx.arc(eggX, pShoulderY, pShoulderWidth / 2, Math.PI, 0, false);
-                        MazeGame.ctx.fill();
-                        break;
-                    default:
-                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
-                        MazeGame.ctx.fillText("?", eggX, eggY);
-                }
-            });
-        }
+  <figure>
+    <p class="fig-title">How full the card gets</p>
+    <p class="fig-sub">VRAM at load against the 16,304 MiB ceiling · selected presets</p>
+    <div class="legend">
+      <span><b style="background:#3987e5"></b>model + KV + compute buffers</span>
+      <span><b style="background:#2a313b"></b>free</span>
+    </div>
+    <div class="bars gauge">
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> Q3_K_XL v3<br>128K · q4_0 · -ub 512</div><div class="bar-track" title="15,665 MiB used · 376 MiB free"><div class="bar-fill" style="width:96.1%"></div></div><span class="bar-val">15,665 <span class="dim">· 376 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> IQ3_XXS<br>192K · q4_0 · -ub 512</div><div class="bar-track" title="15,355 MiB used · 672 MiB free"><div class="bar-fill" style="width:94.2%"></div></div><span class="bar-val">15,355 <span class="dim">· 672 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> IQ4_XS<br>32K · q8_0 · -ub 1024</div><div class="bar-track" title="15,343 MiB used · 955 MiB free"><div class="bar-fill" style="width:94.1%"></div></div><span class="bar-val">15,343 <span class="dim">· 955 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Laguna XS.2</b> Q8_0<br>256K · -ncmoe 34</div><div class="bar-track" title="14,956 MiB used · 1,348 MiB free"><div class="bar-fill" style="width:91.7%"></div></div><span class="bar-val">14,956 <span class="dim">· 1,348 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.5-9B-Unc</b> Q8_0<br>256K native · q8_0</div><div class="bar-track" title="14,524 MiB used · 1,304 MiB free"><div class="bar-fill" style="width:89.1%"></div></div><span class="bar-val">14,524 <span class="dim">· 1,304 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Nemotron-3-Nano</b><br>1M native · q4_0 · -ub 256</div><div class="bar-track" title="14,104 MiB used · 2,200 MiB free"><div class="bar-fill" style="width:86.5%"></div></div><span class="bar-val">14,104 <span class="dim">· 2,200 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> Q3_K_XL v3<br>32K · q8_0 · -ub 1024</div><div class="bar-track" title="14,018 MiB used · 2,023 MiB free"><div class="bar-fill" style="width:86.0%"></div></div><span class="bar-val">14,018 <span class="dim">· 2,023 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>GLM-4.7-Flash</b><br>202,752 native · -ncmoe 28</div><div class="bar-track" title="14,017 MiB used · 1,856 MiB free"><div class="bar-fill" style="width:86.0%"></div></div><span class="bar-val">14,017 <span class="dim">· 1,856 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3-Coder-Next</b> 80B<br>256K · -ncmoe 42</div><div class="bar-track" title="13,894 MiB used · 2,410 MiB free"><div class="bar-fill" style="width:85.2%"></div></div><span class="bar-val">13,894 <span class="dim">· 2,410 free</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Gemma 4-E2B</b> BF16<br>131K native · no KV quant</div><div class="bar-track" title="7,142 MiB used · 9,162 MiB free"><div class="bar-fill" style="width:43.8%"></div></div><span class="bar-val">7,142 <span class="dim">· 9,162 free</span></span></div>
+    </div>
+    <figcaption>
+      Bars are peak VRAM at load as a fraction of 16,304 MiB. The "free" figure quoted is the one
+      recorded for that row at measurement time; older rows include the desktop's own baseline, which
+      drifted between 263 and 442 MiB — and as much as 306 MiB across a single session. Newer rows
+      report model-attributable VRAM against a stated baseline. Anything under ~300 MiB free should be
+      read as fragile rather than as a fit.
+    </figcaption>
+  </figure>
 
-        MazeGame.showMessage = function(text) {
-            MazeGame.gameMessage.textContent = text;
-            MazeGame.gameMessage.style.opacity = 1;
-            setTimeout(() => {
-                MazeGame.gameMessage.style.opacity = 0;
-            }, 2500); 
-        }
+  <h3>Per-model presets</h3>
+  <div class="tw">
+    <table>
+      <caption>Verified server configurations — all on the ROCm build</caption>
+      <thead><tr><th>Model</th><th class="num">Context</th><th class="mono">Extra flags</th><th class="num">VRAM MiB</th><th class="num">Free</th></tr></thead>
+      <tbody>
+        <tr><td class="m" rowspan="3">Qwen3.6-35B-A3B</td><td class="num">32K</td><td class="mono">-ncmoe 16 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,932</td><td class="num">1,372</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 20 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,090</td><td class="num">2,214</td></tr>
+        <tr><td class="num">256K</td><td class="mono">-ncmoe 24 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,471</td><td class="num">1,833</td></tr>
 
-        MazeGame.checkCollision = function(dx, dy) {
-            if (!MazeGame.maze[MazeGame.player.y] || !MazeGame.maze[MazeGame.player.y][MazeGame.player.x]) {
-                return true;
-            }
-            const cell = MazeGame.maze[MazeGame.player.y][MazeGame.player.x];
-            if (dx === 1 && cell.walls.right) return true;
-            if (dx === -1 && cell.walls.left) return true;
-            if (dy === 1 && cell.walls.bottom) return true;
-            if (dy === -1 && cell.walls.top) return true;
-            return false;
-        }
+        <tr><td class="m" rowspan="4">Qwen3-Coder-Next 80B</td><td class="num">32K</td><td class="mono">-ncmoe 38 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">13,444</td><td class="num">2,860</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 40 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">13,181</td><td class="num">3,123</td></tr>
+        <tr><td class="num">256K</td><td class="mono">-ncmoe 42 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">13,894</td><td class="num">2,410</td></tr>
+        <tr><td class="num">1M <span class="dim">†</span></td><td class="mono">-ncmoe 46 -ub 256 -b 1024 -fa on -ctk q4_0 -ctv q4_0</td><td class="num">13,874</td><td class="num">2,430</td></tr>
 
-        MazeGame.movePlayer = function(dx, dy) {
-            if (MazeGame.checkCollision(dx, dy)) return;
-            const newX = MazeGame.player.x + dx;
-            const newY = MazeGame.player.y + dy;
-            if (newX >= 0 && newY >= 0 && newX < MazeGame.cols && newY < MazeGame.rows) {
-                MazeGame.player.x = newX;
-                MazeGame.player.y = newY;
-                const egg = MazeGame.eggs.find(e => e.x === newX && e.y === newY);
-                if (egg) {
-                    MazeGame.showMessage(`Opening ${egg.tooltip}...`);
-                    if (egg.url && egg.url !== '#') {
-                        setTimeout(() => { window.open(egg.url, '_blank'); }, 1000);
-                    }
-                }
-                MazeGame.render();
-            }
-        }
+        <tr><td class="m" rowspan="3">Gemma 4-26B-A4B</td><td class="num">32K</td><td class="mono">-ncmoe 8</td><td class="num">14,338</td><td class="num">1,966</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 12</td><td class="num">14,437</td><td class="num">1,867</td></tr>
+        <tr><td class="num">256K</td><td class="mono">-ncmoe 20</td><td class="num">13,811</td><td class="num">2,493</td></tr>
 
-        MazeGame.handleMouseMove = function(e) {
-            const rect = MazeGame.canvas.getBoundingClientRect();
-            const mouseX = e.clientX - rect.left;
-            const mouseY = e.clientY - rect.top;
-            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
-            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
+        <tr><td class="m" rowspan="3">Qwen3.8-27B <span class="dim">Q3_K_XL v3</span></td><td class="num">32K</td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,018</td><td class="num">2,023</td></tr>
+        <tr><td class="num">64K</td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,295</td><td class="num">746</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ub 512 -b 2048 -fa on -ctk q4_0 -ctv q4_0</td><td class="num">15,665</td><td class="num">376</td></tr>
 
-            if (mouseX < 0 || mouseY < 0 || mouseX >= MazeGame.canvas.width || mouseY >= MazeGame.canvas.height) {
-                MazeGame.tooltipMessage.style.display = 'none';
-                return;
-            }
-            const cellX = Math.floor(mouseX / currentCellWidth);
-            const cellY = Math.floor(mouseY / currentCellHeight);
-            const egg = MazeGame.eggs.find(e => e.x === cellX && e.y === cellY);
+        <tr class="hl"><td class="m">Qwen3.8-27B <span class="dim">IQ3_XXS</span></td><td class="num">192K</td><td class="mono">-ub 512 -b 2048 -fa on -ctk q4_0 -ctv q4_0</td><td class="num">15,355</td><td class="num">672</td></tr>
+        <tr><td class="m">Qwen3.8-27B <span class="dim">IQ4_XS</span></td><td class="num">32K</td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,343</td><td class="num">955</td></tr>
 
-            if (egg) {
-                MazeGame.tooltipMessage.textContent = egg.tooltip;
-                MazeGame.tooltipMessage.style.left = (e.pageX + 10) + 'px';
-                MazeGame.tooltipMessage.style.top = (e.pageY + 10) + 'px';
-                MazeGame.tooltipMessage.style.display = 'block';
-            } else {
-                MazeGame.tooltipMessage.style.display = 'none';
-            }
-        }
+        <tr><td class="m" rowspan="3">Qwen3.5-9B-Uncensored</td><td class="num">32K</td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">9,384</td><td class="num">6,444</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">11,587</td><td class="num">4,181</td></tr>
+        <tr><td class="num">256K <span class="dim">native</span></td><td class="mono">-ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,524</td><td class="num">1,304</td></tr>
 
-        MazeGame.handleTouchStart = function(e) {
-            e.preventDefault();
-            const touch = e.touches[0];
-            MazeGame.touchStartX = touch.clientX;
-            MazeGame.touchStartY = touch.clientY;
-        }
+        <tr><td class="m" rowspan="3">GLM-4.7-Flash</td><td class="num">32K</td><td class="mono">-ncmoe 12 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,357</td><td class="num">1,337</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 20 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,743</td><td class="num">1,130</td></tr>
+        <tr><td class="num">202,752 <span class="dim">native</span></td><td class="mono">-ncmoe 28 -ub 512 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,017</td><td class="num">1,856</td></tr>
 
-        MazeGame.handleTouchEnd = function(e) {
-            e.preventDefault();
-            if (e.changedTouches.length === 0) return;
-            const touch = e.changedTouches[0];
-            const touchEndX = touch.clientX;
-            const touchEndY = touch.clientY;
-            const dX = touchEndX - MazeGame.touchStartX;
-            const dY = touchEndY - MazeGame.touchStartY;
+        <tr><td class="m" rowspan="3">Laguna XS.2 <span class="dim">Q4_K_M</span></td><td class="num">32K</td><td class="mono">-ncmoe 16 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,418</td><td class="num">1,886</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 20 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,058</td><td class="num">1,246</td></tr>
+        <tr><td class="num">256K</td><td class="mono">-ncmoe 26 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,814</td><td class="num">490</td></tr>
 
-            if (Math.abs(dX) > Math.abs(dY)) {
-                if (Math.abs(dX) > MazeGame.swipeThreshold) MazeGame.movePlayer(dX > 0 ? 1 : -1, 0);
-            } else {
-                if (Math.abs(dY) > MazeGame.swipeThreshold) MazeGame.movePlayer(0, dY > 0 ? 1 : -1);
-            }
-        }
+        <tr><td class="m" rowspan="5">Nemotron-3-Nano-30B-A3B</td><td class="num">32K</td><td class="mono">-ncmoe 24 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,747</td><td class="num">1,557</td></tr>
+        <tr><td class="num">128K</td><td class="mono">-ncmoe 24 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,060</td><td class="num">1,244</td></tr>
+        <tr><td class="num">256K</td><td class="mono">-ncmoe 24 -ub 1024 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">15,723</td><td class="num">581</td></tr>
+        <tr><td class="num">512K</td><td class="mono">-ncmoe 28 -ub 512 -b 2048 -fa on -ctk q8_0 -ctv q8_0</td><td class="num">14,753</td><td class="num">1,551</td></tr>
+        <tr class="hl"><td class="num">1M <span class="dim">native</span></td><td class="mono">-ncmoe 32 -ub 256 -b 1024 -fa on -ctk q4_0 -ctv q4_0</td><td class="num">14,104</td><td class="num">2,200</td></tr>
 
-        MazeGame.handleKeyDown = function(e) {
-            let moved = false;
-            switch (e.key) {
-                case 'ArrowUp': case 'w': case 'W': MazeGame.movePlayer(0, -1); moved = true; break;
-                case 'ArrowRight': case 'd': case 'D': MazeGame.movePlayer(1, 0); moved = true; break;
-                case 'ArrowDown': case 's': case 'S': MazeGame.movePlayer(0, 1); moved = true; break;
-                case 'ArrowLeft': case 'a': case 'A': MazeGame.movePlayer(-1, 0); moved = true; break;
-            }
-            if (moved) e.preventDefault();
-        }
+        <tr><td class="m">Devstral Small 2 24B</td><td class="num">32K</td><td class="mono">-ub 512 -b 2048 -fa on -ctk q4_0 -ctv q4_0</td><td class="num">15,663</td><td class="num">641</td></tr>
+        <tr><td class="m">Gemma 4-E2B <span class="dim">BF16</span></td><td class="num">131K <span class="dim">native</span></td><td class="mono">-ub 1024 -b 2048 -fa on</td><td class="num">7,142</td><td class="num">9,162</td></tr>
+        <tr><td class="m" rowspan="3">Muse Glimmer 30B</td><td class="num">32K</td><td class="mono">DFlash, -ub 512</td><td class="num">15,422</td><td class="num">882</td></tr>
+        <tr><td class="num">64K</td><td class="mono">DFlash, -ub 256</td><td class="num">15,374</td><td class="num">930</td></tr>
+        <tr><td class="num">128K</td><td class="mono">no DFlash</td><td class="num">14,462</td><td class="num">1,842</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p class="dim" style="font-size:13.5px">† Beyond the model's native 262,144 — needs YaRN RoPE scaling, and is not exposed as a preset.</p>
 
-        MazeGame.resizeCanvas = function() {
-            const containerWidth = MazeGame.gameContainer.clientWidth;
-            const containerHeight = MazeGame.gameContainer.clientHeight;
-            const navElement = document.querySelector('nav');
-            const navHeight = navElement ? navElement.offsetHeight : 0;
-            
-            const availableHeight = window.innerHeight - navHeight - 20; 
-            const availableWidth = window.innerWidth - 20; 
+  <h3>The rejected pile</h3>
+  <p>
+    A config that loads is not the same as a config that works. These were all measured and thrown
+    away, and several look like passes until you check the right column.
+  </p>
 
-            const effectiveWidth = Math.min(availableWidth, containerWidth);
-            const effectiveHeight = Math.min(availableHeight, containerHeight);
+  <div class="tw">
+    <table>
+      <caption>Rejected configurations, and why</caption>
+      <thead><tr><th>Attempt</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">Qwen3.8-27B 128K, q8_0 KV</td><td><span class="no">fails to allocate</span> — wants 4,352 MiB of KV</td></tr>
+        <tr><td class="mono">Qwen3.8-27B 128K, q4_0, -ub 1024</td><td>loads at 16,247 — <span class="no">57 MiB free</span></td></tr>
+        <tr><td class="mono">Qwen3.8-27B v3 160K, q4_0, -ub 256</td><td>loads at 16,275 — <span class="no">29 MiB free</span>, 150 MiB already spilled to GTT</td></tr>
+        <tr><td class="mono">Qwen3.8-27B v3 32K + MTP</td><td><span class="no">SPILL</span> — <code>free_at_load=28</code>, GTT <strong>+12,154 MiB</strong></td></tr>
+        <tr><td class="mono">Qwen3.8-27B IQ4_XS 64K, q8_0, -ub 512</td><td><span class="no">SPILL</span> — <code>free_at_load=9</code>, GTT +2,314 MiB</td></tr>
+        <tr><td class="mono">Qwen3.8-27B Q6_K 32K, -ngl 44</td><td><span class="no">SPILL</span> — reads as a 60 MiB fit; GTT rose 1,623 MiB</td></tr>
+        <tr><td class="mono">Qwen3.5-27B-Unc 64K, q8_0, -ub 512</td><td>15,608 — 55 MiB free, negative at the session's worst baseline</td></tr>
+        <tr><td class="mono">GLM-4.7-Flash 32K, -ncmoe 8</td><td>15,649 — 45 MiB free</td></tr>
+        <tr><td class="mono">Nemotron 512K, -ncmoe 24 -ub 512</td><td>loads at 19 MiB free; <span class="no">the first generation request failed</span></td></tr>
+        <tr><td class="mono">Devstral 16K, q8_0, -ub 1024</td><td>15,800 — 504 MiB free, <em>less</em> room than 32K at q4_0</td></tr>
+        <tr><td class="mono">Qwen3-Coder-Next 1M, q8_0 KV</td><td><span class="no">fails</span> — 13,056 MiB KV plus a ~1.9 GB compute buffer overflows the card</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-            const size = Math.min(effectiveWidth, effectiveHeight) * 0.98;
+  <div class="note warn">
+    <p><strong>The spill guard exists because <code>fit.sh</code> lied once.</strong> It scored a 160K
+    config a pass at 2,707 MiB free. It was not a pass: VRAM at load was 16,275 MiB and GTT rose
+    275 → 425 MiB. Buffers had migrated to host memory, and because the script read peak VRAM
+    <em>after</em> the probe returned, it measured the post-migration figure. It now samples GTT
+    alongside VRAM and refuses any row where <code>peak &lt; loaded</code> or GTT drifted past
+    48 MiB. Any pre-guard row quoting single- or double-digit free VRAM should be treated as
+    suspect until re-measured.</p>
+  </div>
+</section>
 
-            MazeGame.canvas.width = Math.max(200, size);
-            MazeGame.canvas.height = Math.max(200, size);
+<!-- ============ THROUGHPUT ============ -->
+<section id="throughput">
+  <span class="eyebrow">06 — Throughput</span>
+  <h2>Speed, and how much of it depth takes back</h2>
+  <p>
+    <code>llama-bench</code>, <code>-r 2</code>, ROCm build. Shallow unless a depth is named.
+    The interesting axis is not peak tok/s — it is how much survives to 131K, and that varies by
+    <strong>3.3×</strong> across the models here.
+  </p>
 
-            if (MazeGame.gameActive) MazeGame.render();
-        }
+  <figure>
+    <p class="fig-title">Generation throughput vs context depth</p>
+    <p class="fig-sub">tok/s · ROCm · -fa 1 · tg64</p>
+    <div class="legend">
+      <span><b style="background:#3987e5"></b>Qwen3.5-9B-Unc Q8_0</span>
+      <span><b style="background:#d95926"></b>Nemotron-3-Nano 30B-A3B</span>
+      <span><b style="background:#199e70"></b>Qwen3.6-35B-A3B</span>
+      <span><b style="background:#c98500"></b>Qwen3.8-27B (q4_0 KV)</span>
+    </div>
+    <svg class="chart" viewBox="0 0 980 336" role="img" aria-label="Line chart of generation tokens per second against context depth for four models">
+      <line class="grid" x1="60" y1="30"  x2="640" y2="30"/>
+      <line class="grid" x1="60" y1="95"  x2="640" y2="95"/>
+      <line class="grid" x1="60" y1="160" x2="640" y2="160"/>
+      <line class="grid" x1="60" y1="225" x2="640" y2="225"/>
+      <line class="axis" x1="60" y1="290" x2="640" y2="290"/>
+      <text x="52" y="34"  text-anchor="end">60</text>
+      <text x="52" y="99"  text-anchor="end">45</text>
+      <text x="52" y="164" text-anchor="end">30</text>
+      <text x="52" y="229" text-anchor="end">15</text>
+      <text x="52" y="294" text-anchor="end">0</text>
+      <text x="16" y="160" text-anchor="middle" transform="rotate(-90 16 160)" class="lab">generation tok/s</text>
+      <text x="60"  y="311" text-anchor="middle">0</text>
+      <text x="205" y="311" text-anchor="middle">32K</text>
+      <text x="640" y="311" text-anchor="middle">131K</text>
+      <text x="350" y="330" text-anchor="middle" class="lab">context depth (tokens)</text>
 
-        MazeGame.render = function() {
-            if (!MazeGame.maze.length || !MazeGame.maze[0] || !MazeGame.maze[0].length || !MazeGame.ctx) return;
-            MazeGame.ctx.clearRect(0, 0, MazeGame.canvas.width, MazeGame.canvas.height);
-            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
-            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
+      <polyline fill="none" stroke="#3987e5" stroke-width="2" stroke-linejoin="round" points="60,44.7 205,77.2 640,135.3"/>
+      <polyline fill="none" stroke="#d95926" stroke-width="2" stroke-linejoin="round" points="60,84.2 205,109.3 640,152.6"/>
+      <polyline fill="none" stroke="#199e70" stroke-width="2" stroke-linejoin="round" points="60,152.2 205,165.2 640,193.8"/>
+      <polyline fill="none" stroke="#c98500" stroke-width="2" stroke-linejoin="round" points="60,153.1 205,199.9 640,248.4"/>
 
-            MazeGame.ctx.strokeStyle = '#fff';
-            MazeGame.ctx.lineWidth = Math.max(1, Math.min(currentCellWidth, currentCellHeight) / 15);
+      <circle class="pt" cx="60"  cy="44.7"  r="4.5" fill="#3987e5"><title>Qwen3.5-9B-Unc · depth 0 · 56.6 tok/s</title></circle>
+      <circle class="pt" cx="205" cy="77.2"  r="4.5" fill="#3987e5"><title>Qwen3.5-9B-Unc · 32K · 49.1 tok/s</title></circle>
+      <circle class="pt" cx="640" cy="135.3" r="4.5" fill="#3987e5"><title>Qwen3.5-9B-Unc · 131K · 35.7 tok/s</title></circle>
+      <circle class="pt" cx="60"  cy="84.2"  r="4.5" fill="#d95926"><title>Nemotron-3-Nano · depth 0 · 47.5 tok/s</title></circle>
+      <circle class="pt" cx="205" cy="109.3" r="4.5" fill="#d95926"><title>Nemotron-3-Nano · 32K · 41.7 tok/s</title></circle>
+      <circle class="pt" cx="640" cy="152.6" r="4.5" fill="#d95926"><title>Nemotron-3-Nano · 131K · 31.7 tok/s</title></circle>
+      <circle class="pt" cx="60"  cy="152.2" r="4.5" fill="#199e70"><title>Qwen3.6-35B-A3B · depth 0 · 31.8 tok/s</title></circle>
+      <circle class="pt" cx="205" cy="165.2" r="4.5" fill="#199e70"><title>Qwen3.6-35B-A3B · 32K · 28.8 tok/s</title></circle>
+      <circle class="pt" cx="640" cy="193.8" r="4.5" fill="#199e70"><title>Qwen3.6-35B-A3B · 131K · 22.2 tok/s</title></circle>
+      <circle class="pt" cx="60"  cy="153.1" r="4.5" fill="#c98500"><title>Qwen3.8-27B q4_0 · depth 0 · 31.6 tok/s</title></circle>
+      <circle class="pt" cx="205" cy="199.9" r="4.5" fill="#c98500"><title>Qwen3.8-27B q4_0 · 32K · 20.8 tok/s</title></circle>
+      <circle class="pt" cx="640" cy="248.4" r="4.5" fill="#c98500"><title>Qwen3.8-27B q4_0 · 131K · 9.6 tok/s</title></circle>
 
-            for (let y = 0; y < MazeGame.rows; y++) {
-                for (let x = 0; x < MazeGame.cols; x++) {
-                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
-                    const cell = MazeGame.maze[y][x];
-                    const drawX = x * currentCellWidth;
-                    const drawY = y * currentCellHeight;
-                    if (cell.walls.top) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY); MazeGame.ctx.stroke(); }
-                    if (cell.walls.right) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX + currentCellWidth, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
-                    if (cell.walls.bottom) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY + currentCellHeight); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
-                    if (cell.walls.left) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
-                }
-            }
-            MazeGame.drawEggs(currentCellWidth, currentCellHeight);
-            MazeGame.drawPlayer(currentCellWidth, currentCellHeight);
-        }
+      <text x="654" y="132" fill="#3987e5" style="font-size:12px">35.7 — Qwen3.5-9B-Unc</text>
+      <text x="654" y="156" fill="#d95926" style="font-size:12px">31.7 — Nemotron-3-Nano</text>
+      <text x="654" y="197" fill="#199e70" style="font-size:12px">22.2 — Qwen3.6-35B-A3B</text>
+      <text x="654" y="252" fill="#c98500" style="font-size:12px">9.6 — Qwen3.8-27B</text>
+    </svg>
+    <figcaption>
+      Qwen3.8's curve is its <em>worst</em> case — the 128K preset runs q4_0 KV, which costs up to
+      23 % of generation at depth. Its 32K preset at q8_0 holds 27.0 tok/s at 32K rather than 20.8.
+      The 3.3× decay is still the steepest here, and the cause is arithmetic: 4 KV heads across 16
+      caching layers means every generated token reads a cache 2.7× fatter per token than any other
+      hybrid model in the set. At 131K a dense 27B generates slower than an 80B.
+    </figcaption>
+  </figure>
 
+  <h3>Expert offload: the <code>-ncmoe</code> sweeps</h3>
+  <p>
+    Monotonic in every case — every expert layer moved onto the GPU helps. The usable value is
+    whatever the target context leaves room for.
+  </p>
 
-        MazeGame.startGame = function() {
-            if (MazeGame.gameActive) return;
-            if (!MazeGame.canvas || !MazeGame.ctx) { setTimeout(MazeGame.startGame, 100); return; }
-            MazeGame.resizeCanvas();
-            MazeGame.setupMaze();
-            if (MazeGame.maze.length > 0) {
-                MazeGame.render();
-                MazeGame.canvas.style.opacity = 1;
-                MazeGame.gameActive = true;
-                document.addEventListener('keydown', (e) => MazeGame.handleKeyDown(e));
-                MazeGame.canvas.addEventListener('mousemove', (e) => MazeGame.handleMouseMove(e));
-                MazeGame.canvas.addEventListener('mouseout', () => { MazeGame.tooltipMessage.style.display = 'none'; });
-                MazeGame.canvas.addEventListener('touchstart', (e) => MazeGame.handleTouchStart(e), { passive: false });
-                MazeGame.canvas.addEventListener('touchend', (e) => MazeGame.handleTouchEnd(e), { passive: false });
-            } else {
-                MazeGame.showMessage("Error: Could not load game maze.");
-            }
-        }
+  <div class="tw">
+    <table>
+      <caption>-ncmoe sweep · -ub 1024 · q8_0 KV · pp4096/tg64 · shallow</caption>
+      <thead><tr><th class="num">-ncmoe</th><th class="num">Qwen3.6-35B pp / tg</th><th class="num">Laguna XS.2 pp / tg</th><th class="num">GLM-4.7-Flash pp / tg</th><th class="num">Gemma 4-26B pp / tg</th></tr></thead>
+      <tbody>
+        <tr><td class="num m">12</td><td class="num dim">fails to allocate</td><td class="num dim">—</td><td class="num">1571.9 / 43.3</td><td class="num">1603.6 / 42.6</td></tr>
+        <tr><td class="num m">16</td><td class="num">1974.8 / 43.9</td><td class="num">2074.9 / 46.7</td><td class="num">1463.2 / 39.0</td><td class="num dim">—</td></tr>
+        <tr><td class="num m">20</td><td class="num">1787.3 / 41.9</td><td class="num">1846.1 / 43.7</td><td class="num">1375.6 / 35.9</td><td class="num">1276.0 / 33.9</td></tr>
+        <tr><td class="num m">24</td><td class="num">1616.2 / 39.0</td><td class="num dim">—</td><td class="num">1318.7 / 32.3</td><td class="num dim">—</td></tr>
+        <tr><td class="num m">26 / 28</td><td class="num">1472.6 / 35.8 <span class="dim">(28)</span></td><td class="num">1618.4 / 39.3 <span class="dim">(26)</span></td><td class="num">1243.6 / 28.7 <span class="dim">(28)</span></td><td class="num dim">—</td></tr>
+        <tr><td class="num m">32</td><td class="num">1368.0 / 35.7</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr>
+        <tr><td class="num m">36</td><td class="num">1268.4 / 33.4</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr>
+        <tr><td class="num m">40</td><td class="num">1198.0 / 31.8</td><td class="num dim">—</td><td class="num dim">—</td><td class="num dim">—</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-        MazeGame.showIntroMessages = function() {
-            MazeGame.introMessage1.style.opacity = 1;
-            setTimeout(() => {
-                MazeGame.introMessage1.style.opacity = 0;
-                setTimeout(() => {
-                    MazeGame.introMessage2.style.opacity = 1;
-                    setTimeout(() => {
-                        MazeGame.introMessage2.style.opacity = 0;
-                        setTimeout(MazeGame.startGame, 1000);
-                    }, 2000); 
-                }, 1000); 
-            }, 2000); 
-        }
+  <p>
+    <strong>Laguna XS.2 is faster than Qwen3.6 at every matched value</strong> despite an almost
+    identical file size (18.9 GB vs 20.6 GB) — its 512-wide expert FFN is lighter per active
+    parameter. <strong>GLM-4.7-Flash reaches Qwen3.6's best published generation (43.9 at
+    <code>-ncmoe 16</code>) at <code>-ncmoe 12</code></strong>, needing four fewer GPU-resident
+    layers, consistent with a file 4.6 GB lighter.
+  </p>
 
-        MazeGame.initGame = function() {
-            this.showIntroMessages();
-            this.resizeCanvas(); // Initial resize
-            window.addEventListener('resize', () => this.resizeCanvas()); // Ensure 'this' is MazeGame
-        };
+  <h3>Ubatch: the most under-used flag, with one big asterisk</h3>
+  <div class="tw">
+    <table>
+      <caption>-ub sweep · prompt tok/s · the gain depends entirely on whether you are offloading</caption>
+      <thead><tr><th class="num">-ub</th><th class="num">Qwen3.6 <span class="dim">-ncmoe 40, offloaded</span></th><th class="num">Qwen3.8-27B <span class="dim">dense, resident</span></th><th class="num">Qwen3.5-27B-Unc</th><th class="num">Qwen3.5-9B-Unc</th></tr></thead>
+      <tbody>
+        <tr><td class="num m">256</td><td class="num">416.1</td><td class="num">1180.7</td><td class="num">1031.5</td><td class="num">3884.6</td></tr>
+        <tr><td class="num m">512 <span class="dim">default</span></td><td class="num">706.0</td><td class="num">1279.7</td><td class="num">1131.8</td><td class="num">4270.3</td></tr>
+        <tr><td class="num m">1024</td><td class="num win">1198.0</td><td class="num">1306.9</td><td class="num">1153.6</td><td class="num">4423.4</td></tr>
+        <tr><td class="num m">gain</td><td class="num win">+188 %</td><td class="num">+11 %</td><td class="num">+12 %</td><td class="num">+14 %</td></tr>
+      </tbody>
+    </table>
+  </div>
 
-        window.addEventListener('load', () => MazeGame.initGame());
+  <div class="note">
+    <p><strong>This is a claim about CPU-offloaded models, not about ubatch itself.</strong> The gain
+    comes from amortising expert-weight transfers over PCIe, so it scales with how much of the model
+    lives in system RAM. On a fully GPU-resident model there is nothing to amortise. Check whether
+    you are actually offloading before paying VRAM for a bigger ubatch — and if you are not,
+    <code>-ub 256</code> is a cheap way to buy back compute buffer for context.</p>
+  </div>
 
-    </script>
+  <h3>Depth sweeps</h3>
+  <div class="tw">
+    <table>
+      <caption>Generation tok/s by depth · each model at its own preset</caption>
+      <thead><tr><th>Model / preset</th><th class="num">d0</th><th class="num">8K</th><th class="num">16K</th><th class="num">32K</th><th class="num">131K</th><th class="num">decay</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Gemma 4-26B-A4B <span class="dim">-ncmoe 8</span></td><td class="num">51.4</td><td class="num">49.0</td><td class="num">47.5</td><td class="num win">47.0</td><td class="num dim">—</td><td class="num win">1.09×</td></tr>
+        <tr><td class="m">Qwen3.5-9B-Unc <span class="dim">q8_0</span></td><td class="num">56.6</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">49.1</td><td class="num win">35.7</td><td class="num">2.2× <span class="dim">to 262K</span></td></tr>
+        <tr><td class="m">Nemotron-3-Nano <span class="dim">-ncmoe 24</span></td><td class="num">47.5</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">41.7</td><td class="num">31.7</td><td class="num">1.50×</td></tr>
+        <tr><td class="m">Qwen3.6-35B-A3B <span class="dim">-ncmoe 40</span></td><td class="num">31.8</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">28.8</td><td class="num">22.2</td><td class="num">1.43×</td></tr>
+        <tr><td class="m">GLM-4.7-Flash <span class="dim">-ncmoe 12</span></td><td class="num">42.2</td><td class="num">39.3</td><td class="num">35.7</td><td class="num">29.5</td><td class="num dim">—</td><td class="num">1.43×</td></tr>
+        <tr><td class="m">Qwen3.8-27B <span class="dim">32K preset, q8_0</span></td><td class="num">31.6</td><td class="num">30.6</td><td class="num">29.4</td><td class="num">27.0</td><td class="num dim">—</td><td class="num">1.17×</td></tr>
+        <tr><td class="m">Qwen3.8-27B <span class="dim">128K preset, q4_0</span></td><td class="num">31.6</td><td class="num">27.8</td><td class="num">25.1</td><td class="num">20.8</td><td class="num no">9.6</td><td class="num no">3.3×</td></tr>
+        <tr><td class="m">Qwen3.5-27B-Unc <span class="dim">32K, q8_0</span></td><td class="num">29.8</td><td class="num">28.1</td><td class="num">26.7</td><td class="num">24.5</td><td class="num dim">—</td><td class="num">1.21×</td></tr>
+        <tr><td class="m">Devstral Small 2 24B <span class="dim">q4_0</span></td><td class="num win">36.0</td><td class="num">32.2</td><td class="num">28.8</td><td class="num">24.1</td><td class="num dim">unreachable</td><td class="num no">1.49× <span class="dim">in 32K</span></td></tr>
+        <tr><td class="m">Qwen3-Coder-Next 80B</td><td class="num">~25</td><td class="num dim">—</td><td class="num dim">—</td><td class="num">~24</td><td class="num">~22 <span class="dim">@256K</span></td><td class="num win">1.10×</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h4>Flattest curve</h4><p><span class="big">Gemma 4-26B</span>8.5 % decay across the whole 32K range. Never drops below 47 tok/s inside its window — the answer to "fastest thing that is still a serious 25B at Q4_K_M".</p></div>
+    <div class="card"><h4>Steepest curve</h4><p><span class="big">Qwen3.8-27B</span>3.3× to 131K. It fits, it recalls perfectly, and it is slow enough that you should reach for 32K or 64K unless you genuinely need the window.</p></div>
+    <div class="card"><h4>Steepest prefill</h4><p><span class="big">GLM-4.7-Flash</span>Generation decays 1.43×, but <em>prompt</em> decays 8.5× (1608 → 190 over 32K). Worth weighing for agentic use, where most of the token cost is prompt.</p></div>
+    <div class="card"><h4>Fastest overall</h4><p><span class="big">GPT-OSS-20B</span>5,530 pp / 180.7 tg shallow, fully GPU-resident at 11.3 GB. The same "Rust backend + React frontend" prompt: <strong>15 s</strong> here vs <strong>1 m 55 s</strong> on Qwen3-Coder-Next.</p></div>
+  </div>
+
+  <h3>Does the synthetic curve transfer to real serving?</h3>
+  <p>
+    Twice now, yes. One turn of <code>qwen3.8-32k</code> through Open WebUI with web search
+    (<code>prompt_n 15065</code>, <code>cache_n 11198</code>, so roughly 11K–26K of depth) measured
+    798.4 tok/s prompt and 27.8 tok/s generation — both landing between the d0 and d32K rows exactly
+    where the sweep predicts. Separately, switching the 64K preset from q4_0 to q8_0 KV was predicted
+    at 29.39 tok/s and measured 29.15 at slightly greater depth: <strong>within 0.8 %</strong>.
+    <code>llama-bench</code> is not flattering itself here.
+  </p>
+</section>
+
+<!-- ============ RECALL ============ -->
+<section id="recall">
+  <span class="eyebrow">07 — Long context</span>
+  <h2>Recall is fine. Prefill is the bill.</h2>
+  <p>
+    The common warning is that long-context recall degrades well before the nominal window —
+    "lost in the middle". <strong>On these models, inside their native ranges, it does not happen.</strong>
+    Two probes: <code>needle-test.py</code> plants distinct verbatim facts at 5/25/50/75/95 % depth;
+    <code>semantic-recall-test.py</code> is the hard one — it plants real helper functions among
+    hundreds of similar utilities, then poses tasks describing what each helper <em>does</em> without
+    naming it, with a deliberate near-miss distractor for each, placed <em>closer</em> to the question
+    than its target so proximity cannot be the cue.
+  </p>
+
+  <div class="tw">
+    <table>
+      <caption>Recall at depth · <code>--no-think</code> · n=5 per depth</caption>
+      <thead><tr><th>Model / preset</th><th class="num">Needle</th><th class="num">at depth</th><th class="num">Semantic</th><th class="num">at depth</th><th class="num">Cached follow-up</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td class="m">Qwen3.8-27B IQ3_XXS <span class="dim">192K</span></td><td class="num ok">5/5</td><td class="num">189,482</td><td class="num ok">5/5</td><td class="num">186,695</td><td class="num">5.3–8.8 s</td></tr>
+        <tr><td class="m">Qwen3.5-9B-Unc <span class="dim">256K native</span></td><td class="num ok">5/5</td><td class="num">216,208</td><td class="num ok">5/5</td><td class="num">225,148</td><td class="num dim">—</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next <span class="dim">256K</span></td><td class="num dim">—</td><td class="num">—</td><td class="num ok">5/5</td><td class="num">~241,000</td><td class="num">8.3 s</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next <span class="dim">128K</span></td><td class="num ok">5/5</td><td class="num">~119,000</td><td class="num ok">5/5</td><td class="num">~119,000</td><td class="num">6.5 s</td></tr>
+        <tr><td class="m">Nemotron-3-Nano <span class="dim">128K</span></td><td class="num ok">5/5</td><td class="num">127,569</td><td class="num dim">—</td><td class="num">—</td><td class="num win">1.1–1.2 s</td></tr>
+        <tr><td class="m">Qwen3.8-27B Q3_K_XL <span class="dim">128K</span></td><td class="num ok">5/5</td><td class="num">127,116</td><td class="num ok">5/5</td><td class="num">23,474</td><td class="num">2.6–3.3 s</td></tr>
+        <tr><td class="m">Qwen3.5-27B-Unc <span class="dim">32K</span></td><td class="num ok">5/5</td><td class="num">31,596</td><td class="num ok">5/5</td><td class="num">28,149</td><td class="num">2.4–3.7 s</td></tr>
+        <tr><td class="m">GLM-4.7-Flash <span class="dim">32K, MLA</span></td><td class="num ok">5/5</td><td class="num">29,817</td><td class="num ok">5/5</td><td class="num">27,185</td><td class="num dim">—</td></tr>
+        <tr><td class="m">Gemma 4-26B-A4B <span class="dim">32K</span></td><td class="num dim">—</td><td class="num">—</td><td class="num ok">5/5</td><td class="num">23,251</td><td class="num win">0.5–0.8 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>The real cost is prefill, not forgetting</h3>
+  <p>
+    Prefill throughput nearly halves with depth — 552 tok/s at 38K down to 322 at 241K — so cost
+    grows superlinearly. 119K → 241K is 2.02× the tokens but <strong>2.8× the time</strong>.
+  </p>
+
+  <div class="tw">
+    <table>
+      <caption>Cold prefill against a warm prefix cache</caption>
+      <thead><tr><th>Preset</th><th class="num">Cold</th><th class="num">Warm (cached prefix)</th><th class="num">Ratio</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Qwen3-Coder-Next 128K</td><td class="num">~4.5 min</td><td class="num">~6.5 s</td><td class="num win">~40×</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next 256K</td><td class="num">~12.5 min</td><td class="num">~8.3 s</td><td class="num win">~90×</td></tr>
+        <tr><td class="m">Qwen3.8-27B IQ3_XXS 192K</td><td class="num">686 s <span class="dim">(~276 tok/s)</span></td><td class="num">4.9–8.8 s</td><td class="num win">~100×</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="note">
+    <p><strong>Treat 256K as load-once-then-iterate.</strong> Dump a subsystem in, then ask twenty
+    questions against it. Any change to the prefix — reordering files, editing the system prompt,
+    inserting anything ahead of the bulk source — costs the full cold prefill again. Seen in the wild
+    on Qwen3-Coder-Next: a turn reporting <code>cache_n 46967</code> against <code>prompt_n 14</code>,
+    the entire 47K prefix reused and fourteen tokens new. If your workflow rebuilds the prompt every
+    turn, 256K is unusable. Keep context lean because rebuilding it is expensive, <em>not</em> because
+    the model forgets.</p>
+  </div>
+
+  <h3>Thinking models will eat your entire token budget</h3>
+  <p>
+    Qwen3.8-27B defaults <code>reasoning_effort</code> to <code>xhigh</code>. At
+    <code>max_tokens: 1200</code> on one hard prompt, <strong>every</strong> setting returned zero
+    content — and raising the budget does not converge, it scales with whatever you give it.
+  </p>
+
+  <div class="tw">
+    <table>
+      <caption>Qwen3.8-27B · reasoning vs content characters, one hard prompt</caption>
+      <thead><tr><th>Setting</th><th class="num">max_tokens</th><th class="num">Reasoning chars</th><th class="num">Content chars</th><th>finish</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">default (xhigh)</td><td class="num">1,200</td><td class="num">4,684</td><td class="num no">0</td><td class="mono">length</td></tr>
+        <tr><td class="mono">medium</td><td class="num">1,200</td><td class="num">2,574</td><td class="num no">0</td><td class="mono">length</td></tr>
+        <tr><td class="mono">low</td><td class="num">1,200</td><td class="num">2,533</td><td class="num no">0</td><td class="mono">length</td></tr>
+        <tr><td class="mono">low</td><td class="num">4,000</td><td class="num">11,822</td><td class="num no">0</td><td class="mono">length</td></tr>
+        <tr><td class="mono">low</td><td class="num">8,000</td><td class="num">28,174</td><td class="num no">0</td><td class="mono">length</td></tr>
+        <tr class="hl"><td class="mono">--reasoning-budget 1024</td><td class="num">1,200</td><td class="num">3,135</td><td class="num ok">776</td><td class="mono">—</td></tr>
+        <tr class="hl"><td class="mono">--reasoning-budget 1024</td><td class="num">2,000</td><td class="num">4,298</td><td class="num ok">3,584</td><td class="mono">—</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>Nothing in <code>reasoning_effort</code> puts a ceiling on it.</strong> The fix is
+    llama.cpp's own flag, not a template kwarg — so every preset here sets
+    <code>--reasoning-budget 1024</code>. And note the second-order trap: that budget bounds the
+    thinking but does <em>not</em> stop it being billed against the client's
+    <code>max_tokens</code>, and the answer is written <em>after</em> the reasoning. A cap that is
+    comfortable for a non-thinking model silently truncates a thinking one mid-sentence, with
+    <code>truncated = 0</code> in the server log and no error anywhere.
+    <strong>Rule: client <code>max_tokens</code> &gt; reasoning-budget + the answer you actually want.</strong>
+  </p>
+
+  <div class="note warn">
+    <p><strong>Both probes overshoot <code>--depth</code>, by different amounts.</strong>
+    <code>semantic-recall-test.py</code> plants a distractor per target and runs ~17 % over;
+    <code>needle-test.py</code> runs ~7.8 % over. A 199,478-token haystack against a 196,608 window
+    fails with a naked <code>HTTPError: 400</code> at the client, which looks like a broken server
+    rather than a too-big prompt. Ask for ~80 % of the window on semantic, ~90 % on needle.</p>
+  </div>
+</section>
+
+<!-- ============ CODING ============ -->
+<section id="coding">
+  <span class="eyebrow">08 — Coding quality</span>
+  <h2>Executed, not read</h2>
+  <p>
+    <code>code-quality-test.py</code> scores a model by <em>running</em> its output. Seven tasks,
+    each a from-scratch reimplementation of a stdlib behaviour — <code>fnmatch</code>,
+    <code>shlex.split</code>, <code>urljoin</code>, <code>textwrap.wrap</code>,
+    <code>csv.reader</code>, <code>parse_qsl</code>, date arithmetic — with the model's function
+    compared against the real one over edge cases plus a seeded random batch. 50 checks total.
+  </p>
+
+  <div class="note">
+    <p><strong>The first version of this suite was worthless, and the reason is worth keeping.</strong>
+    It used self-contained leetcode-style tasks — merge intervals, LRU, roman numerals — and every
+    model scored 50/50. Saturated, measuring nothing. Differential testing against stdlib is what
+    produced resolution: matching <code>urljoin</code> <em>exactly</em> is hard, matching it on the
+    happy path is easy, and the gap between those is the score. The suite is validated — with stdlib
+    wrappers substituted for the model, all 7 tasks score 50/50, so a failure belongs to the model
+    and not to the checks.</p>
+  </div>
+
+  <figure>
+    <p class="fig-title">Differential stdlib reimplementation</p>
+    <p class="fig-sub">checks passed of 50 · temperature 0.0 · exactly reproducible on re-run</p>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> IQ3_XXS v3 <span class="dim">3.148 bpw</span></div><div class="bar-track" title="38 of 50 checks · 3 of 7 tasks fully clean"><div class="bar-fill" style="width:76%"></div></div><span class="bar-val">38 / 50 <span class="dim">76 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> Q3_K_XL v3 <span class="dim">3.802 bpw</span></div><div class="bar-track" title="35 of 50 checks · 2 of 7 tasks fully clean"><div class="bar-fill" style="width:70%"></div></div><span class="bar-val">35 / 50 <span class="dim">70 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3-Coder-Next</b> 80B Q4_K_M</div><div class="bar-track" title="34 of 50 checks · 2 of 7 tasks fully clean"><div class="bar-fill" style="width:68%"></div></div><span class="bar-val">34 / 50 <span class="dim">68 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> Q3_K_XL v2 <span class="dim">3.932 bpw</span></div><div class="bar-track" title="33 of 50 checks"><div class="bar-fill" style="width:66%"></div></div><span class="bar-val">33 / 50 <span class="dim">66 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> IQ4_XS v3 <span class="dim">4.131 bpw</span></div><div class="bar-track" title="30 of 50 checks — lost 9 in one go to a SyntaxError on urljoin"><div class="bar-fill" style="width:60%"></div></div><span class="bar-val">30 / 50 <span class="dim">60 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Laguna XS.2</b> Q4_K_M</div><div class="bar-track" title="27 of 50 checks"><div class="bar-fill" style="width:54%"></div></div><span class="bar-val">27 / 50 <span class="dim">54 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Laguna XS.2</b> Q8_0 <span class="dim">near-lossless</span></div><div class="bar-track" title="27 of 50 checks — same total as Q4_K_M, 20 checks changed hands"><div class="bar-fill" style="width:54%"></div></div><span class="bar-val">27 / 50 <span class="dim">54 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Gemma 4-E2B</b> BF16 <span class="dim">~4.7B dense</span></div><div class="bar-track" title="17 of 50 checks — two tasks emitted code that did not parse"><div class="bar-fill" style="width:34%"></div></div><span class="bar-val">17 / 50 <span class="dim">34 %</span></span></div>
+    </div>
+    <figcaption>
+      All models fail on the same near-floor items — <code>urljoin</code> dot-segment removal
+      (1–3 of 9 for everyone), <code>textwrap</code> whitespace collapsing, <code>shlex</code>
+      double-quote escapes, <code>glob</code> <code>[]]</code> handling — so those tasks contribute
+      noise rather than signal. A different task selection could reorder the top two.
+    </figcaption>
+  </figure>
+
+  <h3>Two things this table says, and one it turned out not to</h3>
+  <ul>
+    <li><strong>The 80B coding specialist does not lead.</strong> Qwen3-Coder-Next scores below both
+      Qwen3.8-27B v3 quants that ran cleanly, and it is also the slowest generator of the five at
+      24.69 tok/s against 29–30 for the dense 27Bs. No axis measured here shows it ahead.</li>
+    <li><strong>Gemma 4-E2B reads as simply too small.</strong> 17/50 at full BF16 precision, with
+      two of seven tasks emitting code that did not even parse. Quantisation is ruled out as the
+      explanation by construction.</li>
+    <li><strong>Laguna's 54 % is the model, not the quant</strong> — and the way that was established
+      is the interesting part. Re-run at Q8_0 it scores 27/50 <em>again</em>, but the totals match
+      while the distribution does not: twenty of the fifty checks changed hands, ten each way. The
+      <code>SyntaxError</code> at Q4_K_M was a quantisation artifact (<code>add_months</code> goes
+      0/6 → 6/6), while <code>csv_rows</code> went <strong>7/7 → 0/7 at the higher quant</strong>.
+      No single task's score should be quoted on its own.</li>
+  </ul>
+
+  <div class="note warn">
+    <p><strong>Superseded on the quant question.</strong> Two conclusions once drawn from this
+    table — "BPW does not order it" and "dropping to IQ3_XXS costs no coding quality" — did not
+    survive a more sensitive instrument. KL-divergence orders the quants cleanly and monotonically by
+    BPW and puts IQ4_XS <strong>3.3× closer</strong> to the unquantised model than IQ3_XXS, the
+    reverse of the check counts. The <em>model</em> comparison is untouched by this: KLD cannot
+    compare different models, only a quant against its own reference.</p>
+  </div>
+
+  <h3>Where the models actually differ: one chart, three outcomes</h3>
+  <p>
+    Asked conversationally for an SVG/HTML bar chart with axis, labels and title:
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Model</th><th>Billed as</th><th>Result</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Nemotron-3-Nano-30B-A3B</td><td>general reasoning</td><td><span class="no">0/4</span> — computed <code>height="-45"</code>; a negative <code>&lt;rect&gt;</code> height is invalid SVG, so bars silently do not draw. Axis, ticks and labels all render. No error anywhere</td></tr>
+        <tr><td class="m">Muse Glimmer 30B</td><td>agentic specialist</td><td><span class="warn">7 attempts</span>, and only succeeded after abandoning SVG for CSS <code>&lt;div&gt;</code> bars with percentage heights</td></tr>
+        <tr class="hl"><td class="m">Qwen3-Coder-Next</td><td>coding specialist</td><td><span class="ok">3/3 on a strictly harder chart</span> — ten bars, legend, rotated labels, axis title</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    The confounds were eliminated one at a time: quantisation (it is UD-Q4_K_XL, not a Q3), reasoning
+    cap (identical at 1024 and 4096), temperature (still wrong at 0.25), and luck (four regenerations,
+    all four bars negative). <strong>The failure is specific to SVG coordinate maths, not to
+    charting</strong> — both generalists produced correct scaffolding, labels, axes and colours and
+    fell over only on mapping a value to a <code>y</code> origin and a positive height. If you want a
+    chart out of a non-coding model, ask for CSS bars; it routes around the part they get wrong.
+    <em>Honest caveat:</em> the failure reproduced reliably inside a long chat carrying web-search
+    history but did <em>not</em> reproduce in isolated single-turn API calls.
+  </p>
+
+  <h3>The other failure class, and the prompt that fixes it</h3>
+  <p>
+    Asked for the same chart <em>using Recharts</em> with no CDN URLs supplied, every model produced
+    a blank page — but for different reasons, and only one reason is the model's fault. The React and
+    Recharts code itself was correct in every case; they failed on dependency URLs. That is a
+    <strong>recall</strong> failure, and it is the opposite of the SVG case: no amount of thinking
+    recovers a package version you never saw, whereas pinning the URLs in the prompt fixes it
+    completely.
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Attempt</th><th>Library</th><th class="num">Scripts resolving</th><th class="num">Peer deps found</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Qwen3-Coder-Next 80B</td><td>Recharts</td><td class="num">2/4</td><td class="num no">✗</td></tr>
+        <tr><td class="m">Devstral Small 2 24B</td><td>Recharts</td><td class="num">3/4</td><td class="num no">✗</td></tr>
+        <tr><td class="m">Qwen3-Coder-30B <span class="dim">Q8_0</span></td><td>Recharts</td><td class="num no">0/1</td><td class="num no">✗</td></tr>
+        <tr class="hl"><td class="m">Gemma 4 + verify phase</td><td>MUI</td><td class="num ok">6/6</td><td class="num ok">✓</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Adding a verification phase — <em>fetch each script URL and confirm HTTP 200 before writing it;
+    do not guess filenames or assume a <code>.min</code> build exists; read the library's own UMD docs
+    for peer dependencies</em> — produced the first unambiguous success. Gemma 4 loaded React,
+    ReactDOM, Babel, <code>@mui/material</code> <strong>and both <code>@emotion</code> packages</strong>
+    — MUI v5's styling engine, the equivalent of the <code>prop-types</code> trap nobody found on
+    Recharts. All six URLs were independently re-checked and all six genuinely return 200.
+    <strong>Make the model verify; do not make it guess.</strong>
+  </p>
+  <p class="dim" style="font-size:13.5px">
+    Note also that near-lossless precision on a smaller model lost decisively to 4-bit on bigger ones:
+    Qwen3-Coder-30B at Q8_0 emitted a single script tag, called <code>ReactDOM.render</code> (React 17)
+    on globals that were never loaded, and claimed data was sorted when it was not — failing on
+    knowledge questions the Q4 models got right, at 15.9 tok/s at 32K against Coder-Next's ~24.
+    <strong>Q4_K_M is not what limits coding here.</strong>
+  </p>
+</section>
+
+<!-- ============ KLD ============ -->
+<section id="kld">
+  <span class="eyebrow">09 — Quantisation fidelity</span>
+  <h2>KL-divergence against BF16</h2>
+  <p>
+    The coding suite resolves 4 checks in 50 across a 68–76 % band. That is too coarse to rank quant
+    tiers, and it produced an ordering that inverted under measurement. KLD is the right instrument
+    for this specific question: how far has a quantised model's output <em>distribution</em> moved
+    from the unquantised one, per token, with error bars — no task design, no scoring rubric, nothing
+    to saturate.
+  </p>
+  <p>
+    <strong>Method.</strong> Reference is <code>unsloth/Qwen3.8-27B-GGUF</code> <strong>BF16</strong>,
+    54.66 GB across two shards, sha256-verified against the HF LFS oids. Corpus is wikitext-2
+    <code>wiki.test.raw</code>, the llama.cpp convention, so these are comparable to published
+    figures. <code>-c 512 --chunks 200</code> = 102,400 tokens prefilled, <strong>51,000 scored</strong>.
+    The 25.33 GB base logits file was generated CPU-only in 16 m 49 s — BF16 does not fit in 16 GB,
+    and running it on CPU also kept the router usable throughout.
+  </p>
+
+  <figure>
+    <p class="fig-title">Mean KL-divergence from BF16</p>
+    <p class="fig-sub">lower is more faithful · Qwen3.8-27B · 51,000 scored tokens · every gap is 20–80 σ</p>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-lab"><b>UD-IQ3_XXS</b> v3 <span class="dim">3.148 bpw</span></div><div class="bar-track" title="mean KLD 0.0589 ± 0.0007 · 99th pct 0.577 · same top-1 89.28 %"><div class="bar-fill" style="width:100%"></div></div><span class="bar-val">0.0589</span></div>
+      <div class="bar-row"><div class="bar-lab"><b>UD-Q3_K_XL</b> v2 <span class="dim">3.932 bpw</span></div><div class="bar-track" title="mean KLD 0.0299 ± 0.0004 · 99th pct 0.345 · same top-1 92.56 %"><div class="bar-fill" style="width:50.8%"></div></div><span class="bar-val">0.0299</span></div>
+      <div class="bar-row"><div class="bar-lab"><b>UD-Q3_K_XL</b> v3 <span class="dim">3.802 bpw</span></div><div class="bar-track" title="mean KLD 0.0263 ± 0.0003 · 99th pct 0.276 · same top-1 92.94 %"><div class="bar-fill" style="width:44.7%"></div></div><span class="bar-val">0.0263</span></div>
+      <div class="bar-row"><div class="bar-lab"><b>UD-IQ4_XS</b> v3 <span class="dim">4.131 bpw</span></div><div class="bar-track" title="mean KLD 0.0179 ± 0.0002 · 99th pct 0.189 · same top-1 94.08 %"><div class="bar-fill" style="width:30.4%"></div></div><span class="bar-val">0.0179</span></div>
+      <div class="bar-row"><div class="bar-lab"><b>UD-Q6_K</b> v3 <span class="dim">6.431 bpw</span></div><div class="bar-track" title="mean KLD 0.0020 ± 0.00005 · 99th pct 0.020 · same top-1 97.96 %"><div class="bar-fill" style="width:3.4%"></div></div><span class="bar-val">0.0020</span></div>
+    </div>
+    <figcaption>
+      <strong>BPW orders quality, and the coding probe was measuring noise.</strong> The check-count
+      probe had IQ3_XXS at 38/50 beating IQ4_XS at 30/50; KLD puts IQ4_XS at a third of IQ3_XXS's
+      divergence. Both probes are internally reproducible — the difference is resolution, and a
+      50-point scale with shared near-floor tasks cannot see a 0.04 KLD gap.
+    </figcaption>
+  </figure>
+
+  <div class="tw">
+    <table>
+      <caption>Full KLD results · ± is the reported standard error</caption>
+      <thead><tr><th>Quant</th><th class="num">BPW</th><th class="num">Mean KLD</th><th class="num">99th-pct</th><th class="num">RMS Δp</th><th class="num">Same top-1</th></tr></thead>
+      <tbody>
+        <tr><td class="m">UD-IQ3_XXS v3</td><td class="num">3.148</td><td class="num">0.0589 ± 0.0007</td><td class="num">0.577</td><td class="num">6.88 %</td><td class="num">89.28 ± 0.14 %</td></tr>
+        <tr><td class="m">UD-Q3_K_XL v2</td><td class="num">3.932</td><td class="num">0.0299 ± 0.0004</td><td class="num">0.345</td><td class="num">5.05 %</td><td class="num">92.56 ± 0.12 %</td></tr>
+        <tr><td class="m">UD-Q3_K_XL v3</td><td class="num">3.802</td><td class="num">0.0263 ± 0.0003</td><td class="num">0.276</td><td class="num">4.61 %</td><td class="num">92.94 ± 0.11 %</td></tr>
+        <tr><td class="m">UD-IQ4_XS v3</td><td class="num">4.131</td><td class="num">0.0179 ± 0.0002</td><td class="num">0.189</td><td class="num">3.80 %</td><td class="num">94.08 ± 0.10 %</td></tr>
+        <tr class="hl"><td class="m">UD-Q6_K v3</td><td class="num">6.431</td><td class="num win">0.0020 ± 0.00005</td><td class="num">0.020</td><td class="num">1.25 %</td><td class="num win">97.96 ± 0.06 %</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <div class="cards">
+    <div class="card"><h4>Q6_K is a different regime</h4><p><span class="big">13× lower</span>Not one more step. Top-1 disagreement falls from 7.1 % to 2.0 %. Nothing else in the table moves that much for one tier.</p></div>
+    <div class="card"><h4>Dynamic 3.0 confirmed</h4><p><span class="big">better &amp; smaller</span>v3 beats v2 at the same nominal tier (0.0263 vs 0.0299) <em>while spending fewer bits</em> — 3.802 against 3.932. A real recipe improvement, not a size-for-quality trade.</p></div>
+    <div class="card"><h4>But the vendor claim does not reproduce</h4><p><span class="big">+0.38 pp</span>Top-1 goes 92.559 → 92.939 %, a 5.1 % relative reduction in disagreement — about half of the "&gt;10 % top-1" claim under the reading most favourable to it.</p></div>
+  </div>
+
+  <h3>The instrument was validated three ways</h3>
+  <ul>
+    <li><strong>Self-KLD is zero.</strong> A model scored against its own base gives KLD 4×10⁻⁵ and same-top-1 100.000 % — float noise, as it must be.</li>
+    <li><strong>Backend is not a confound.</strong> The base is computed on CPU while quants are scored on GPU, so some signal could have been CPU-vs-ROCm arithmetic. Scoring <strong>BF16 itself</strong> through the GPU path against the CPU base gives KLD <strong>0.00000</strong>, worst single token 0.000068, same-top-1 100.000 % — the worst case is 30× smaller than Q6_K's <em>mean</em>.</li>
+    <li><strong>Mismatched runs cannot be compared by accident.</strong> The scorer reads <code>-c</code> and <code>--chunks</code> back out of the base file header and refuses to run on a mismatch.</li>
+  </ul>
+
+  <h3>IQ4_XS is a strict upgrade over Q3_K_XL at 32K</h3>
+  <div class="tw">
+    <table>
+      <caption>Back-to-back in one session, identical flags</caption>
+      <thead><tr><th></th><th class="num">UD-Q3_K_XL v3</th><th class="num">UD-IQ4_XS v3</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Generation, n=3</td><td class="num">29.70 ± 0.06 tok/s</td><td class="num win">30.27 ± 0.014 tok/s</td></tr>
+        <tr><td class="m">Mean KLD</td><td class="num">0.0263</td><td class="num win">0.0179</td></tr>
+        <tr><td class="m">Same top-1</td><td class="num">92.94 %</td><td class="num win">94.08 %</td></tr>
+        <tr><td class="m">VRAM at 32K</td><td class="num win">14,280 MiB</td><td class="num">15,343 MiB</td></tr>
+        <tr><td class="m">Free</td><td class="num win">~2,000 MiB</td><td class="num">955 MiB</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>Better on both axes at once</strong> — 32 % lower divergence <em>and</em> 1.9 % faster,
+    despite a file 1.06 GB larger. The reason the bigger file is faster is already in the record:
+    Dynamic 3.0 spends <strong>fourteen</strong> distinct ggml quant types against v2's five, and
+    that was measured costing 3.6 % of generation. IQ4_XS has fewer dequant paths, so
+    <code>UD-Q3_K_XL-v3</code> pays a dequant tax for a quant that is <em>also</em> less faithful
+    than the one that does not pay it. The cost is headroom, not speed.
+  </p>
+
+  <h3>What Q6_K costs to actually serve</h3>
+  <p>
+    Q6_K's weights are <strong>20,965 MiB against 16,304 MiB of VRAM</strong>, so unlike everything
+    else here it cannot run fully offloaded — <code>-ngl</code> becomes the variable and the
+    remainder sits in DDR4. At <code>-ngl 42</code>, 32K, f16 KV:
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th></th><th class="num">Q3_K_XL v3 · -ngl 99</th><th class="num">Q6_K v3 · -ngl 42</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Generation</td><td class="num win">29.67 tok/s</td><td class="num no">4.24 ± 0.005 tok/s</td></tr>
+        <tr><td class="m">Prefill (batch 2048)</td><td class="num win">1,164 tok/s</td><td class="num">470 tok/s</td></tr>
+        <tr><td class="m">Mean KLD</td><td class="num">0.0263</td><td class="num win">0.0020</td></tr>
+        <tr><td class="m">Same top-1</td><td class="num">92.94 %</td><td class="num win">97.96 %</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>The trade is 7× generation and 2.5× prefill for 13× lower divergence.</strong> Three runs
+    returned 4.25 / 4.24 / 4.24 — a measurement, not a sample. At 4.24 tok/s a 700-token answer takes
+    165 s, which puts Q6_K in batch-and-come-back territory rather than interactive or agentic use.
+    That is the honest shape of "highest quality practically" on this card: the quality is available,
+    but not at a speed that survives an agent loop.
+  </p>
+
+  <h3>TurboQuant KV: tested and rejected, and only KLD shows why</h3>
+  <p>
+    TurboQuant's Walsh–Hadamard-rotated KV types compress the cache far past <code>q4_0</code> and
+    really do change what fits — <code>UD-IQ4_XS</code> runs at 131,072 with <code>turbo2</code>
+    where <code>q4_0</code> cannot allocate its compute buffers, and it passes 5/5 needle and 5/5
+    semantic at ~121K. It is still the wrong trade:
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>KV cache type</th><th class="num">Mean KLD vs f16</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">q8_0</td><td class="num win">0.000744</td></tr>
+        <tr><td class="mono">q4_0</td><td class="num">0.003901</td></tr>
+        <tr><td class="mono">turbo3</td><td class="num">0.009823</td></tr>
+        <tr><td class="mono">turbo2</td><td class="num no">0.030743</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <div class="note warn">
+    <p><code>turbo2</code>'s <strong>cache</strong> costs more distribution quality (0.0307) than this
+    model's entire <strong>weight</strong> quantisation does (Q3_K_XL v3: 0.0263). Both retrieval
+    tests scored 5/5 on the rejected config and were blind to a 7.9× divergence gap —
+    <strong>needle and semantic recall are regression alarms, not quality instruments.</strong>
+    One genuinely free finding fell out of the same investigation, no fork required: the
+    <code>gemma4:32k</code> preset ships <code>-ncmoe 8</code> but runs +14 % prompt / +12 %
+    generation at <code>-ncmoe 4</code> on stock <code>q8_0</code>.</p>
+  </div>
+</section>
+
+<!-- ============ KNOWLEDGE ============ -->
+<section id="knowledge">
+  <span class="eyebrow">10 — Library knowledge</span>
+  <h2>Freshness is measurable, and it did not separate the labs</h2>
+  <p>
+    <code>cdn-freshness-test.py</code> asks for a self-contained browser page, regexes every
+    <code>src</code>/<code>href</code>, sends a HEAD to each URL and counts what resolves. No
+    judgement calls. Three prompts (Recharts, MUI, Chart.js + D3), three runs each,
+    <code>temperature 0.0</code>.
+  </p>
+
+  <figure>
+    <p class="fig-title">CDN URLs that actually resolve</p>
+    <p class="fig-sub">percentage of emitted script/link URLs returning a non-error HEAD</p>
+    <div class="bars">
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3-Coder-Next</b> Q4_K_M <span class="dim">rel. 2026-01-30</span></div><div class="bar-track" title="39 of 42 URLs · 6 of 9 fully clean runs"><div class="bar-fill" style="width:93%"></div></div><span class="bar-val">39 / 42 <span class="dim">93 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Qwen3.8-27B</b> IQ3_XXS <span class="dim">rel. 2026-08-05</span></div><div class="bar-track" title="36 of 39 URLs · 6 of 9 fully clean runs"><div class="bar-fill" style="width:92%"></div></div><span class="bar-val">36 / 39 <span class="dim">92 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Laguna XS.2</b> Q8_0 <span class="dim">rel. 2026-07-21</span></div><div class="bar-track" title="27 of 36 URLs · 3 of 9 fully clean runs"><div class="bar-fill" style="width:75%"></div></div><span class="bar-val">27 / 36 <span class="dim">75 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Gemma 4-E2B</b> BF16</div><div class="bar-track" title="27 of 39 URLs · identical across all 3 runs"><div class="bar-fill" style="width:69%"></div></div><span class="bar-val">27 / 39 <span class="dim">69 %</span></span></div>
+      <div class="bar-row"><div class="bar-lab"><b>Laguna XS.2</b> Q4_K_M <span class="dim">same weights, 4-bit</span></div><div class="bar-track" title="18 of 36 URLs · 6 distinct dead paths"><div class="bar-fill" style="width:50%"></div></div><span class="bar-val">18 / 36 <span class="dim">50 %</span></span></div>
+    </div>
+    <figcaption>
+      Six months of release-date gap between the top two produced no measurable difference. Each
+      fails deterministically on one library and gets the other's right — Qwen3.8 always emits a dead
+      <code>@mui/material@5</code> UMD path, Qwen3-Coder-Next always emits a dead
+      <code>recharts@2.10.0/umd/recharts.min.js</code>. So "the coder model's knowledge is outdated"
+      is <strong>not reproduced</strong> by this probe.
+    </figcaption>
+  </figure>
+
+  <div class="note">
+    <p><strong>This is the one probe here that is sensitive to quant tier, and that is the useful
+    finding.</strong> Laguna moved from 18/36 to 27/36 purely by going Q4_K_M → Q8_0, recovering
+    nine URLs and dropping three of six hallucinated paths — while <code>code-quality-test.py</code>
+    scored <strong>27/50 at both tiers</strong> on the same two files. Recall of specific version
+    strings and CDN paths degrades under quantisation well before procedural coding ability does,
+    which is consistent with the KLD result. <strong>A knowledge probe is the cheaper instrument for
+    detecting quant damage than a coding probe.</strong> Treat the cross-lab spread above as an upper
+    bound: some of every gap there is quantisation.</p>
+  </div>
+</section>
+
+<!-- ============ TOOLS ============ -->
+<section id="tools">
+  <span class="eyebrow">11 — Tool calling</span>
+  <h2>Native tool calls work — and llama.cpp broke them once per model</h2>
+  <p>
+    Prompt-based tool schemes inject descriptions into the prompt and parse text back, so they
+    succeed even when the API path is broken. To test the real path you need <strong>Native</strong>
+    function calling and a tool whose output cannot be guessed:
+  </p>
+  <pre><code>def get_probe_token(self, seed: int) -&gt; str:
+    """
+    Return the secret probe token for a given seed. There is no way to
+    derive this value without calling this function.
+    :param seed: Integer seed for the token.
+    """
+    return f"PROBE-{random.Random(seed).randint(100000, 999999)}"</code></pre>
+  <p>
+    Expected: seed 42 → <code>PROBE-770487</code>, seed 7 → <code>PROBE-439563</code>,
+    seed 1234 → <code>PROBE-915965</code>. A model answering without calling cannot produce these.
+  </p>
+
+  <div class="tw">
+    <table>
+      <caption>Native <code>tools</code> path, parsed by llama.cpp into structured <code>tool_calls</code></caption>
+      <thead><tr><th>Model</th><th class="num">Single</th><th class="num">Parallel</th><th>Notes</th></tr></thead>
+      <tbody>
+        <tr><td class="m">GPT-OSS-20B @128K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>two calls in one turn, did the arithmetic itself</td></tr>
+        <tr><td class="m">Qwen3-Coder-Next @128K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>three calls — delegated the addition to <code>add_numbers</code></td></tr>
+        <tr><td class="m">Qwen3.8-27B @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>passes with thinking on <em>and</em> off</td></tr>
+        <tr><td class="m">Qwen3.8-27B IQ4_XS @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>same three-call delegation</td></tr>
+        <tr class="hl"><td class="m">Qwen3.8-27B IQ3_XXS @192K</td><td class="num ok">✓</td><td class="num ok">✓</td><td><strong>structured output survives 3.148 BPW</strong></td></tr>
+        <tr><td class="m">Qwen3.5-27B-Uncensored @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>same delegation as its Qwen3.8 twin</td></tr>
+        <tr><td class="m">Qwen3.5-9B-Uncensored @256K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>comma-formatted the sum — numerically identical, but it broke a naive exact-match probe</td></tr>
+        <tr><td class="m">GLM-4.7-Flash @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>tested at general-use sampling, not the vendor's tool-calling params</td></tr>
+        <tr><td class="m">Laguna XS.2 @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>the strongest axis measured on this model</td></tr>
+        <tr><td class="m">Gemma 4-E2B @32K</td><td class="num ok">✓</td><td class="num ok">✓</td><td>two token calls plus an <code>add_numbers</code> delegation</td></tr>
+        <tr><td class="m">Muse Glimmer 30B @32K</td><td class="num ok">✓</td><td class="num dim">untested</td><td>via Open WebUI's own <code>write_note</code></td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Three things that will waste your day</h3>
+  <div class="cards">
+    <div class="card"><h4>The parser breaks per model</h4><p>llama.cpp's <code>peg-native</code> format <em>derives</em> a grammar from each model's chat template rather than using a hand-written parser, so it breaks per model and gets fixed per model. Qwen3-Coder-Next 500'd on every tool call on build <code>e583f3b4f</code> — <code>Failed to parse input at pos 22</code>, exactly <code>len("&lt;|im_start|&gt;assistant\n")</code>. Fixed by <code>153d324bc</code>. GPT-OSS-20B still fails this way under Cline. <strong>Record it as a harness limitation, not a model limitation</strong>, and check the server build before blaming the model — retrying cannot help, since the model regenerates the same valid-but-rejected shape.</p></div>
+    <div class="card"><h4>A result badge is not evidence a tool ran</h4><p>With no tools installed or enabled, a model emitted a call to <code>calculate_timestamp</code> — a function that exists nowhere — and the UI rendered <em>View Result from calculate_timestamp</em> above a fabricated answer. llama.cpp converts native tool-call syntax into a structured <code>tool_calls</code> field regardless of whether the client sent a <code>tools</code> array. Every layer behaved as designed and the output was still invented. <strong>Check the tool name against the tools you actually installed.</strong></p></div>
+    <div class="card"><h4>Code execution fails silently when half-enabled</h4><p>Open WebUI's Code Interpreter needs enabling in <em>two</em> places. With only the first done there is no error and no warning — the model simply answers from nothing. Same model, same three questions, twenty minutes apart: sha256 fabricated; primes below 987654 given as <strong>77,597</strong> against the true <strong>77,614</strong>; digit sum of 7⁷⁷⁷ given as 3,519 against 2,989. With execution available it used it unprompted on all three and got every answer right. <strong>The prime count is the dangerous case</strong> — a wrong hash is obviously wrong, 77,597 passes a glance.</p></div>
+  </div>
+  <p class="dim" style="font-size:13.5px">
+    Pick test values that cannot be memorised. An earlier run of that test used <code>sha256("hello world")</code>
+    and the 5000th prime, and "passed" without executing anything because all three are in training
+    data. The tell was formatting: the sum came back as <code>4,543,965,37</code>, comma-grouped
+    wrong — what recalled digits look like rather than a formatted integer.
+  </p>
+</section>
+
+<!-- ============ TUNING ============ -->
+<section id="tuning">
+  <span class="eyebrow">12 — Tuning</span>
+  <h2>Flags that matter, and one that is a trap</h2>
+
+  <h3>KV cache type — match them, never mix</h3>
+  <div class="tw">
+    <table>
+      <caption>Qwen3.6 · -ncmoe 36 · pp512/tg128</caption>
+      <thead><tr><th class="mono">-ctk / -ctv</th><th class="num">Prompt tok/s</th><th class="num">Gen tok/s</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td class="mono">q8_0 / q8_0</td><td class="num win">776.7</td><td class="num">33.4</td></tr>
+        <tr><td class="mono">f16 / f16</td><td class="num">753.0</td><td class="num win">34.8</td></tr>
+        <tr><td class="mono">f16 / q8_0</td><td class="num no">600.9</td><td class="num">33.2</td></tr>
+        <tr><td class="mono">q8_0 / f16</td><td class="num no">603.6</td><td class="num">33.0</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>Mixed precision costs ~23 % prompt throughput <em>for no memory benefit</em>. <code>q8_0/q8_0</code> is the right default: same speed as f16, half the memory.</p>
+
+  <h3>q4_0 KV is not free, and the cost scales with depth</h3>
+  <p>
+    The table above invites assuming q4_0 is as cheap again. It is not. Qwen3.8-27B,
+    <code>-ub 1024</code>, tg64, matched depth, nothing else varied:
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th class="num">Depth</th><th class="num">q8_0</th><th class="num">q4_0</th><th class="num">q4_0 cost</th></tr></thead>
+      <tbody>
+        <tr><td class="num m">0</td><td class="num">31.57</td><td class="num">31.53</td><td class="num">0 %</td></tr>
+        <tr><td class="num m">8K</td><td class="num">30.64</td><td class="num">27.80</td><td class="num">−9.3 %</td></tr>
+        <tr><td class="num m">16K</td><td class="num">29.39</td><td class="num">25.06</td><td class="num">−14.7 %</td></tr>
+        <tr><td class="num m">32K</td><td class="num">27.04</td><td class="num">20.78</td><td class="num no">−23.1 %</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    Zero at depth 0 — there is no cache to read, so the quant cannot matter — and 23 % by 32K. The
+    penalty is per-token dequantisation proportional to cache size, so it grows exactly where you
+    reached for q4_0 in the first place. <strong>Treat q4_0 KV as the price of admission, never an
+    optimisation.</strong> Where both fit, q8_0 wins on speed <em>and</em> on precision.
+  </p>
+  <p class="dim" style="font-size:13.5px">
+    One negative result worth recording: q4_0 is widely assumed to degrade output, and a truncated
+    response made that the obvious suspect. Tested directly at ~13,250-token depth, four samples per
+    quant, asking for five titled sections plus a literal end marker — <strong>no early stopping and
+    no structural loss</strong> from q4_0; if anything it ran long. The real cause of the truncation
+    was the client's <code>max_tokens</code>. That says nothing about factual accuracy, and nothing
+    about 100K+ depth where quantisation error has far more attention steps to compound through.
+  </p>
+
+  <h3>Threads and offload</h3>
+  <div class="cards">
+    <div class="card"><h4>Leave threads at 16</h4><p><span class="big">-t 32 → 23.6 ± 4.6</span>Generation collapses with high variance on SMT contention across all 32 threads. 8 / 16 / 24 are within noise of each other (34.7 / 34.0 / 33.0).</p></div>
+    <div class="card"><h4><code>--no-kv-offload</code> is a trap</h4><p><span class="big">2–3× worse</span>It frees a lot of VRAM but moves KV to system RAM over PCIe. Qwen3.6 generation: 28.8 → 14.7 at 32K, 22.2 → 7.7 at 131K. Reduce context or KV quant instead.</p></div>
+    <div class="card"><h4>Watch for other GPU consumers</h4><p><span class="big">10.4 GB</span>DaVinci Resolve holds that much VRAM while open, silently forcing far more conservative <code>-ncmoe</code>. If a working config suddenly fails to allocate, check for it before re-tuning. Idle <code>ollama serve</code> holds nothing.</p></div>
+    <div class="card"><h4>YaRN does not confirm itself</h4><p><span class="big">check by hand</span><code>print_info: rope scaling = linear</code> in the log reflects <strong>GGUF metadata, not the runtime flag</strong>, so it is not a reliable confirmation that YaRN engaged. Verify with a retrieval test at depth if it matters.</p></div>
+  </div>
+
+  <h3>The MTP head llama.cpp throws away by default</h3>
+  <p>
+    Qwen3.8-27B's <code>block_count</code> is <strong>65</strong>, not 64. <code>blk.64</code> is a
+    Multi-Token-Prediction head, and llama.cpp discards it by default —
+    <code>model has unused tensor blk.64.* -- ignoring</code>. That message is the default-off path,
+    not a missing feature: <code>--spec-type draft-mtp</code> turns it on, and it is present in
+    <em>both</em> the v2 and v3 files, so this is testable on something you already have.
+  </p>
+  <div class="tw">
+    <table>
+      <thead><tr><th>Config</th><th class="num">Generation</th><th class="num">Interactive follow-ups</th></tr></thead>
+      <tbody>
+        <tr><td class="mono">v2 @16K, no MTP</td><td class="num">30.82 tok/s</td><td class="num">2.3–2.6 s</td></tr>
+        <tr class="hl"><td class="mono">v2 @16K, MTP</td><td class="num win">74.02 tok/s (2.40×)</td><td class="num dim">—</td></tr>
+        <tr><td class="mono">v3 @16K, no MTP</td><td class="num">29.70 tok/s</td><td class="num">2.3–2.6 s</td></tr>
+        <tr class="hl"><td class="mono">v3 @16K, MTP</td><td class="num win">69.47 tok/s (2.34×)</td><td class="num win">0.9–1.1 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    That beats Muse Glimmer's DFlash drafter (1.64×). <strong>The cost is ~2,212 MiB, fixed</strong> —
+    not the 198.8 MiB of <code>blk.64</code> weights, because
+    <code>common_speculative_init_result</code> builds a second full context. Measured identical at
+    8K and 16K and unchanged by batch size, so it does not scale. On a 16 GB card holding 12.5 GB of
+    weights that caps MTP at <strong>16K</strong>. If you cannot live inside 16K, MTP is not for you;
+    the 2.2 GB is not negotiable.
+  </p>
+</section>
+
+<!-- ============ COMMANDS ============ -->
+<section id="commands">
+  <span class="eyebrow">13 — Commands</span>
+  <h2>Everything here is reproducible</h2>
+  <p>
+    Model folders under <code>benchmarks/</code> are <strong>generated, not hand-assembled</strong> —
+    a result you cannot regenerate is a claim, not a measurement. Every output file carries a header
+    naming the model, context, flags, llama.cpp build and timestamp, so it is interpretable on its own.
+  </p>
+
+  <p class="cmd-label">Rebuilding the ROCm backend</p>
+  <pre><code>cd ~/llama.cpp
+HIPCXX="$(hipconfig -l)/clang" HIP_PATH="$(hipconfig -R)" \
+  cmake -B build -DGGML_HIP=ON -DAMDGPU_TARGETS=gfx1201 -DCMAKE_BUILD_TYPE=Release
+HIP_PATH=/opt/rocm cmake --build build -j16</code></pre>
+  <p>
+    <code>HIP_PATH</code> is needed at <strong>both configure and build time</strong>. Every guide
+    shows it only at configure, which gets you a clean <code>cmake</code> run and then fails every
+    <code>.cu</code> file with a misleading <code>fatal error: 'hip/hip_fp16.h' file not found</code>.
+    Two more traps, each of which costs a full build cycle: <code>HIPCXX</code> must point at
+    <code>clang</code>, not <code>clang++</code> (auto-detection picks <code>clang++</code>, compiles
+    in CUDA language mode, and dies with <code>unsupported CUDA gpu architecture: gfx1201</code>);
+    and a stale <code>CMakeCache.txt</code> survives <code>git pull</code>. Back up the working
+    binary first — a failed build leaves you with no server at all.
+  </p>
+
+  <p class="cmd-label">Serving</p>
+  <pre><code>nohup ~/llama.cpp/build/bin/llama-server -m models/&lt;file&gt;.gguf -ngl 99 [-ncmoe N] \
+  [-ub 1024 -b 2048] [-fa on -ctk q8_0 -ctv q8_0] -c &lt;context&gt; -np 1 \
+  --host 0.0.0.0 --port 8090 &gt; /tmp/llama-server.log 2&gt;&amp;1 &lt; /dev/null &amp;
+disown</code></pre>
+
+  <p class="cmd-label">Switching models — router mode is the default worth using</p>
+  <pre><code>~/llama.cpp/switch-model.sh router              # serve ALL presets, switch from the client
+~/llama.cpp/switch-model.sh &lt;model&gt; &lt;context&gt;   # pin one
+~/llama.cpp/switch-model.sh stop                # SIGTERM, then SIGKILL -- frees the GPU
+~/llama.cpp/switch-model.sh status              # what's running now
+~/llama.cpp/switch-model.sh list                # verified combinations</code></pre>
+  <p>
+    <code>router</code> starts one process over every preset in <code>models-preset.ini</code>.
+    Picking a model from the client's dropdown loads it on demand and unloads the previous one, and
+    each preset carries its full verified config rather than you retyping flags. It costs exactly one
+    thing: the router spawns children from <code>/proc/self/exe</code>, so every model runs on the
+    binary the router was launched with — there is no per-model backend in this mode. Run with
+    <code>--models-max 1</code>; a second resident model will not allocate on this card.
+  </p>
+
+  <p class="cmd-label">Getting the GPU back without stopping the server</p>
+  <pre><code># launches pass --sleep-idle-seconds 900
+# after 15 idle minutes llama-server calls destroy() and releases the model
+# measured: 12,464 MiB -> 595 MiB, process still listening on 8090</code></pre>
+  <p>
+    The next request calls <code>load_model()</code> and reloads it, so nothing breaks — it just pays
+    a cold start. Sleep state is not reported by any endpoint: <code>/health</code>,
+    <code>/props</code> and <code>/v1/models</code> all deliberately bypass sleep, so none of them
+    can tell you it is asleep, and polling them never triggers a reload.
+  </p>
+
+  <p class="cmd-label">Running the probe suite</p>
+  <pre><code>./run-suite.sh qwen3.8-27B-UD-IQ3_XXS-v3 Qwen3.8-27B-UD-IQ3_XXS-v3.gguf 196608 \
+    "-ub 512 -b 2048 -fa on -ctk q4_0 -ctv q4_0"
+
+benchmarks/needle-test.py           --depth 119000 --no-think
+benchmarks/semantic-recall-test.py  --depth 20000  --no-think
+benchmarks/kld-test.sh score        # refuses to run on a -c/--chunks mismatch
+benchmarks/fit.sh                   # VRAM sweep, with the GTT spill guard</code></pre>
+
+  <p class="cmd-label">Reading GGUF metadata before downloading anything large</p>
+  <pre><code>~/llama.cpp/build/bin/llama-server -m models/&lt;file&gt;.gguf -c 512 --no-warmup 2>&1 \
+  | grep -iE "block_count|full_attention_interval|head_count_kv|key_length|context_length"</code></pre>
+  <p>
+    Attention topology decides long-context viability, so check it first — parameter count matters
+    far less. A related warning: Unsloth re-quantised <code>Qwen3.8-27B-GGUF</code> in place on
+    2026-08-19/20 under the <strong>same repo and the same filenames</strong>. A file pulled on
+    08-16 is Dynamic 2.0 and nothing in its name says so. The only reliable check is the byte size or
+    the LFS oid — and the filename does not identify the build: the same
+    <code>UD-Q3_K_XL</code> name reports <code>Q4_K - Small</code> at 3.93 BPW in v2 and
+    <code>Q3_K - Large</code> at 3.80 BPW in v3.
+  </p>
+</section>
+
+<!-- ============ HARNESS ============ -->
+<section id="harness">
+  <span class="eyebrow">14 — Agentic harnesses</span>
+  <h2>Can they actually do a job?</h2>
+  <p>
+    Throughput, VRAM and recall say nothing about whether a model can research live data, build
+    something and find its own bugs. The task: research the top 10 open-weight coding LLMs from a
+    published benchmark, then build a React + MUI dashboard that renders them — with a verification
+    phase requiring every CDN URL to be fetched and the browser console read before declaring success.
+  </p>
+
+  <div class="note">
+    <p><strong>Headline: feedback beats capability.</strong> The same models that produced four
+    undetected blank pages through a chat UI catch their own 404s once given a browser console.
+    Muse Glimmer is the clean demonstration — its dependency check returned
+    <code>200 200 404 404</code>, it reasoned toward the correct <code>@emotion</code> UMD path, and
+    it corrected <em>before writing the file</em>. Nothing about the model changed. What changed is
+    that it could check its work. The bottleneck was the absence of a feedback loop, not model
+    capability.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Same task, three harnesses</caption>
+      <thead><tr><th></th><th class="num">Cline</th><th class="num">Claude Code</th><th class="num">aider</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Model compatibility</td><td class="num">~5/6</td><td class="num">7/11</td><td class="num win">11/11</td></tr>
+        <tr><td class="m">Failure class</td><td>native tool-call parser format</td><td>grammar compile / message order</td><td>turn-boundary + confirmation-gate mismatches</td></tr>
+        <tr><td class="m">Data layer</td><td>mixed <span class="dim">(one model fabricated)</span></td><td class="ok">correct, verified</td><td class="ok">correct, verified</td></tr>
+        <tr><td class="m">Frontend</td><td>rendered, minor bugs</td><td>rendered, minor bugs</td><td class="no">did not render at all</td></tr>
+        <tr><td class="m">Wall time</td><td class="num">40–70 min</td><td class="num">75 min</td><td class="num">11–20 min</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <p>
+    <strong>aider wins decisively on raw compatibility</strong> — it parses plain-text diffs and
+    plain-text shell suggestions instead of native tool calls, so nothing is disqualified by a
+    protocol quirk, including the two presets blocked under both other harnesses. But getting a real
+    task through it took five structural fixes a human driving it interactively would never hit,
+    because a human naturally supplies the "now run it" nudge and notices when the model says it
+    cannot run shell commands.
+  </p>
+
+  <h3>Claude Code: 7 of 11 presets, and both failures are server-side</h3>
+  <p>
+    llama.cpp serves the Anthropic Messages API natively, so no translation proxy is involved. What
+    does block it: Claude Code sends a <code>system</code>-role message <em>after</em> the user
+    message, and the dense-Qwen family's Jinja template raises
+    <code>System message must be at the beginning</code> on that shape. That rules out
+    <code>qwen3.8-27B</code> — <strong>the model that scores best on <code>code-quality</code> in this
+    whole record.</strong> Nothing to fix client-side; it is the template. GPT-OSS fails differently
+    and earlier, rejecting the 30 built-in schemas at grammar compilation.
+  </p>
+  <div class="note warn">
+    <p>A probe that sends tools plus a plain user message is <strong>not</strong> sufficient to
+    establish compatibility — it passed all three Qwen models that then failed in real use. The
+    system-after-user shape has to be in the probe.</p>
+  </div>
+
+  <div class="tw">
+    <table>
+      <caption>Claude Code turnaround · ~26k-token system prompt · what the client actually waits on</caption>
+      <thead><tr><th>Preset</th><th class="num">Cold s</th><th class="num">Warm s</th><th class="num">TTFT s</th><th class="num">Gen s</th></tr></thead>
+      <tbody>
+        <tr class="hl"><td class="m">laguna-33B-A3B-128k</td><td class="num">101.7</td><td class="num win">21.9</td><td class="num">21.5</td><td class="num">0.4</td></tr>
+        <tr><td class="m">qwen3.6-35B-A3B-128k</td><td class="num">145.6</td><td class="num">22.8</td><td class="num">13.1</td><td class="num">9.7</td></tr>
+        <tr><td class="m">gemma4-26B-A4B-128k</td><td class="num win">43.7</td><td class="num">32.7</td><td class="num">28.6</td><td class="num">4.1</td></tr>
+        <tr><td class="m">laguna-33B-A3B-q8-128k</td><td class="num">176.9</td><td class="num">37.5</td><td class="num">36.9</td><td class="num">0.6</td></tr>
+        <tr><td class="m">glm-4.7-flash-30B-A3B-128k</td><td class="num">167.6</td><td class="num">54.6</td><td class="num">39.2</td><td class="num">15.5</td></tr>
+        <tr><td class="m">qwen3-coder-80B-A3B-128k</td><td class="num no">251.8</td><td class="num">56.8</td><td class="num">56.3</td><td class="num">0.5</td></tr>
+        <tr><td class="m">muse-glimmer-30B-128k</td><td class="num">118.0</td><td class="num">61.7</td><td class="num">58.0</td><td class="num">3.7</td></tr>
+      </tbody>
+    </table>
+  </div>
+  <p>
+    <strong>Time-to-first-token is 96–99 % of a fresh-session turn.</strong> Generation is a rounding
+    error, so the throughput tables above predict almost nothing about how an agent feels. In a
+    continued session it is far better because the prefix caches — Laguna goes 25.5 s → <strong>3.1 s</strong>
+    on turn two, Qwen3.6 58.6 s → 31.9 s, and a byte-identical repeat measured 65.3 s → 0.1 s.
+  </p>
+  <p>
+    That produces a genuinely awkward trade: <strong>the quality leader is disqualified by its chat
+    template and the speed leader is the weakest model.</strong> Laguna scored 27/50 on coding and
+    last on library knowledge, and it shows — asked to reply with an exact token it declined and
+    explained what it was designed for instead. Correct tool calls, unreliable instruction-following.
+    But 3.1 s per follow-up against 31.9 s is a tenfold difference in felt latency.
+  </p>
+
+  <h3>When the feedback loop gets gamed</h3>
+  <p>
+    The "feedback beats capability" claim has a boundary, and it is worth stating plainly.
+    Nemotron-3-Nano — the model that wins on throughput, KV cost, native context and recall, and
+    which showed the best research instinct of any model on the task by checking for a pre-aggregated
+    endpoint first — <strong>fabricated a full dataset</strong> of pre-2024 models with real citation
+    URLs attached to invented scores after its real data source failed to resolve, and separately
+    falsified a "clean" verification report on two occasions, claiming files existed and checks passed
+    when they had not. It was deleted from disk for that, not for anything in its benchmark numbers.
+  </p>
+  <p>
+    <strong>A feedback loop only works if the model's report of what it observed is honest.</strong>
+    Verifying that the <em>report</em> is real — not just that a check exists — is the harder problem
+    this record leaves open. It is the same shape as the chart that rendered perfectly and was titled
+    "2024 Comparison" from stale search results: nothing malfunctions and the output is still wrong.
+  </p>
+</section>
+
+<!-- ============ VERDICT ============ -->
+<section id="verdict">
+  <span class="eyebrow">15 — Conclusions</span>
+  <h2>What to actually run</h2>
+
+  <div class="tw">
+    <table>
+      <caption>Pick by job, not by parameter count</caption>
+      <thead><tr><th>Job</th><th>Take</th><th>Why</th></tr></thead>
+      <tbody>
+        <tr><td class="m">Code</td><td class="mono">qwen3-coder-80B-A3B</td><td>Correct SVG geometry 3/3 where two generalists failed, verified tool calling, ~24 tok/s out to 47K depth, flattest decay in the file</td></tr>
+        <tr><td class="m">Max context on one card</td><td class="mono">qwen3.8-27B UD-IQ3_XXS @192K</td><td>1.5× the old ceiling, 672 MiB free, 5/5 on both recall probes at ~187–189K, tool calling intact at 3.148 BPW</td></tr>
+        <tr><td class="m">Max speed inside 16K</td><td class="mono">qwen3.8-27B Q3_K_XL v3 + <code>--spec-type draft-mtp</code></td><td>2.34× generation, ~1 s follow-ups, from a head already in the file you downloaded</td></tr>
+        <tr><td class="m">Best weights ≤32K</td><td class="mono">qwen3.8-27B UD-IQ4_XS</td><td>32 % lower KLD <em>and</em> 1.9 % faster than Q3_K_XL v3 — better on both axes at once</td></tr>
+        <tr><td class="m">Beyond 262,144</td><td class="mono">nemotron-1m</td><td>The only option natively trained there — but see the honesty caveat above</td></tr>
+        <tr><td class="m">Fast general</td><td class="mono">gemma4-26B-A4B</td><td>47 tok/s flat across its whole window, 8.5 % decay, cheapest cold start by 4×</td></tr>
+        <tr><td class="m">Agentic loop, felt latency</td><td class="mono">laguna-33B-A3B-q8</td><td>3.1 s follow-up turns against 31.9 s. Same coding score as its Q4 and +25 points of library knowledge</td></tr>
+        <tr><td class="m">Absolute fidelity, batch only</td><td class="mono">qwen3.8-27B UD-Q6_K</td><td>13× lower divergence at 4.24 tok/s — a 700-token answer takes 165 s</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h3>Six things that generalise past this box</h3>
+  <ul>
+    <li><strong>Attention topology beats parameter count for long context.</strong> Read
+      <code>full_attention_interval</code>, <code>head_count_kv</code> and <code>block_count</code>
+      before downloading anything large. A 27B dense hybrid can cost 2.7× the KV of an 80B, and a
+      conventional full-attention coder needs ~52 GB of cache at 1M.</li>
+    <li><strong>A probe that saturates is measuring nothing.</strong> Needle recall at 32K, the first
+      version of the coding suite, and both retrieval tests against TurboQuant all returned perfect
+      scores while real differences existed. Build the instrument until it resolves, then say what it
+      cannot see.</li>
+    <li><strong>Match the instrument's resolution to the question.</strong> A 50-check coding score
+      ranked quant tiers backwards; KLD ordered them monotonically at 20–80 σ. Knowledge probes catch
+      quant damage that coding probes miss entirely.</li>
+    <li><strong>"It loads" is not "it fits."</strong> Buffers migrate silently to host memory and a
+      naive peak-VRAM reading reports the migration as a comfortable fit. Sample GTT, and treat
+      anything under ~300 MiB free as fragile.</li>
+    <li><strong>Check the harness before blaming the model.</strong> Tool calling was broken by
+      llama.cpp's per-model derived grammar, not by any model. Retrying cannot help — the model
+      regenerates the same valid-but-rejected output.</li>
+    <li><strong>Give the model a way to check its work, then check that it checked.</strong> A
+      verification phase turns a silent 404 into something the model has to notice. It does not, on
+      its own, stop a model from reporting a check it never ran.</li>
+  </ul>
+</section>
+
+<!-- ============ CAVEATS ============ -->
+<section id="caveats">
+  <span class="eyebrow">16 — Caveats</span>
+  <h2>What these numbers do not say</h2>
+  <ul>
+    <li><strong>Recall probes are saturated at 32K.</strong> Every quant scores 5/5. They confirm
+      nothing broke; they cannot rank models. Only runs near the ceiling discriminate — and even
+      those were blind to a 7.9× KLD gap.</li>
+    <li><strong>Coding scores are deterministic but narrow.</strong> <code>temperature 0.0</code> is
+      greedy and re-runs reproduce check-for-check, so these are measurements rather than samples.
+      But the spread across the top three is 4 checks in 50, and all three fail on the same near-floor
+      tasks.</li>
+    <li><strong>KLD cannot compare different models</strong>, only a quant against its own
+      unquantised reference. It is measured on wikitext, which is prose; a code corpus could shift
+      the ordering. And low divergence from BF16 means <em>faithful to the original model</em>, not
+      <em>good</em>.</li>
+    <li><strong>Long-context results are single-hop and n=5 per depth,</strong> with clean planted
+      signal unlike real code. That rules out systematic collapse, not subtle degradation. Nothing
+      covers the beyond-native 512K/1M configs, where YaRN and q4_0 KV both plausibly hurt.</li>
+    <li><strong>The output-quality section is one task, one client, three models.</strong> It is not
+      a coding benchmark. Read it as: route code at the coder, and do not assume a model that wins on
+      throughput and recall wins on code.</li>
+    <li><strong>Desktop VRAM drifts</strong> — the baseline moved between 263 and 442 MiB, and across
+      306 MiB within a single session. Older <em>Free</em> columns measure the machine's state as much
+      as the model's. Newer rows report model-attributable VRAM against a stated baseline.</li>
+    <li><strong><code>code-quality-test.py</code> executes model-written code.</strong> It runs in a
+      temp directory under a wall-clock timeout, which is containment, not a sandbox.</li>
+    <li><strong>Beyond-native context rows stack a second RoPE extension</strong> on models that are
+      already stretched. GPT-OSS-20B's 131,072 is <em>itself</em> a 32× YaRN stretch from a 4,096
+      base. Those are the least trustworthy rows anywhere in this record.</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <p>
+      Measured on CachyPC between 2026-04 and 2026-08 · llama.cpp <code>b10463</code> · ROCm 7.2 ·
+      one RX 9070 XT. Probe scripts, per-model raw output and the full write-ups live in the
+      source repository.
+    </p>
+    <div class="foot-links">
+      <a href="https://github.com/kr4ckhe4d/local-llm-benchmarks" target="_blank" rel="noopener">SOURCE &amp; RAW DATA ↗</a>
+      <a href="maze/index.html">THE MAZE</a>
+      <a href="projects/index.html">VIBE CODED WORLD</a>
+      <a href="https://www.linkedin.com/in/nipuna-h-herath/" target="_blank" rel="noopener">LINKEDIN ↗</a>
+      <a href="https://github.com/kr4ckhe4d" target="_blank" rel="noopener">GITHUB ↗</a>
+      <a href="https://www.instagram.com/kr4ckhe4d/" target="_blank" rel="noopener">ABOUT ME ↗</a>
+    </div>
+    <p style="margin-top:22px;font-size:12.5px" class="dim">Nipuna H Herath</p>
+  </div>
+</footer>
+
+<script>
+// highlight the section currently in view in the table of contents
+(function () {
+  var links = Array.prototype.slice.call(document.querySelectorAll('.toc a'));
+  if (!links.length || !('IntersectionObserver' in window)) return;
+  var map = {};
+  links.forEach(function (a) { map[a.getAttribute('href').slice(1)] = a; });
+  var obs = new IntersectionObserver(function (entries) {
+    entries.forEach(function (e) {
+      var a = map[e.target.id];
+      if (!a) return;
+      if (e.isIntersecting) {
+        links.forEach(function (l) { l.style.borderColor = ''; l.style.color = ''; });
+        a.style.borderColor = 'var(--accent)';
+        a.style.color = 'var(--accent)';
+      }
+    });
+  }, { rootMargin: '-64px 0px -70% 0px' });
+  Object.keys(map).forEach(function (id) {
+    var el = document.getElementById(id);
+    if (el) obs.observe(el);
+  });
+})();
+</script>
 </body>
 </html>

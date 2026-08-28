@@ -1,0 +1,570 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <title>Maze — Nipuna H Herath</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            margin: 0;
+            background: #111; /* Modern dark background */
+            color: #e0e0e0; /* Modern light text color */
+            font-family: 'Inter', sans-serif; /* Modern font */
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Black Navigation Bar Style */
+        nav {
+            background-color: #000000; /* Black background */
+            padding: 5px 10px;
+            border-bottom: 2px solid #333333; /* Dark grey border */
+            width: 100%;
+            box-sizing: border-box;
+            z-index: 100;
+            flex-shrink: 0;
+            text-align: left;
+        }
+
+        nav ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+            display: inline-flex;
+        }
+
+        nav ul li {
+            margin-right: 10px;
+        }
+
+        nav ul li a {
+            color: #e0e0e0; /* Light grey text for contrast */
+            text-decoration: none;
+            font-size: 16px;
+            font-family: "Times New Roman", Times, serif; /* 90s font for nav items */
+            padding: 5px 8px;
+            border: 1px solid #444444; /* Slightly lighter grey border for links */
+            background-color: #1a1a1a; /* Very dark grey for button feel on black */
+            display: inline-block;
+            transition: background-color 0.3s ease, color 0.3s ease; /* Smooth transition */
+        }
+
+        nav ul li a:hover {
+            background-color: #333333; /* Lighter grey on hover */
+            color: #ffffff; /* White text on hover */
+            text-decoration: none; /* Keep no underline or add if preferred */
+        }
+
+        nav ul li a.active {
+            background-color: #00ffcc; /* Accent color for active link (modern touch) */
+            color: #000000; /* Black text for active link for contrast with accent */
+            border: 1px solid #00ffcc;
+        }
+        /* End of Black Navigation Bar Styles */
+
+
+        /* Container for the game canvas and messages - REVERTED TO MODERN */
+        .game-container {
+            flex-grow: 1;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            width: 100%;
+            position: relative;
+            overflow: hidden;
+            padding: 20px; /* Modern padding */
+            box-sizing: border-box;
+            background-color: #111; /* Modern dark background for game area */
+        }
+
+        /* Canvas style - REVERTED TO MODERN */
+        canvas {
+            border: 4px solid #fff; /* Modern border */
+            background: #222; /* Modern canvas background */
+            max-width: 100%;
+            max-height: 100%;
+            display: block;
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            object-fit: contain;
+        }
+
+        /* Game Message style - REVERTED TO MODERN */
+        #gameMessage {
+            position: fixed;
+            top: 60px; /* Adjusted to be below nav, leaving some space */
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(0, 0, 0, 0.85); /* Modern background */
+            color: white; /* Modern text color */
+            padding: 12px 22px; /* Modern padding */
+            border: 1px solid white; /* Modern border */
+            border-radius: 8px; /* Modern border-radius */
+            opacity: 0;
+            transition: opacity 0.5s ease-in-out;
+            z-index: 110;
+            font-size: 1em; /* Modern font size */
+            white-space: nowrap;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.5); /* Modern shadow */
+        }
+
+        /* Tooltip Message style - REVERTED TO MODERN */
+        #tooltipMessage {
+            position: absolute;
+            background: rgba(0, 0, 0, 0.9); /* Modern background */
+            color: white; /* Modern text color */
+            padding: 6px 12px; /* Modern padding */
+            border: 1px solid white; /* Modern border */
+            border-radius: 5px; /* Modern border-radius */
+            pointer-events: none;
+            z-index: 120;
+            display: none;
+            white-space: nowrap;
+            font-size: 0.9em; /* Modern font size */
+            box-shadow: 0 2px 10px rgba(0,0,0,0.4); /* Modern shadow */
+        }
+
+        /* Styles for the intro messages - REVERTED TO MODERN */
+        .intro-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            color: white; /* Modern text color */
+            font-family: 'Inter', sans-serif; /* Modern font */
+            font-size: clamp(2em, 5vw, 3em); /* Modern responsive font size */
+            opacity: 0;
+            transition: opacity 1s ease-in-out;
+            z-index: 20;
+            text-align: center;
+            pointer-events: none;
+            text-shadow: none; /* No shadow for modern look */
+        }
+    </style>
+</head>
+
+<body>
+    <nav>
+        <ul>
+            <li><a href="../index.html">Home</a></li>
+            <li><a href="index.html" class="active">MAZE</a></li>
+            <li><a href="../projects/index.html">VIBE CODED WORLD</a></li>
+        </ul>
+    </nav>
+
+    <div class="game-container">
+        <div id="introMessage1" class="intro-message">hello</div>
+        <div id="introMessage2" class="intro-message">let's play a game</div>
+        <canvas id="mazeCanvas" width="600" height="600"></canvas> <div id="tooltipMessage"></div>
+    </div>
+    <div id="gameMessage"></div>
+
+    <script>
+        const MazeGame = {};
+
+        MazeGame.canvas = document.getElementById('mazeCanvas');
+        MazeGame.ctx = MazeGame.canvas.getContext('2d');
+        MazeGame.gameMessage = document.getElementById('gameMessage');
+        MazeGame.tooltipMessage = document.getElementById('tooltipMessage');
+        MazeGame.introMessage1 = document.getElementById('introMessage1');
+        MazeGame.introMessage2 = document.getElementById('introMessage2');
+        MazeGame.gameContainer = document.querySelector('.game-container');
+
+        MazeGame.cols = 15; // Fixed number of columns
+        MazeGame.rows = 15; // Fixed number of rows
+
+        MazeGame.maze = [];
+        MazeGame.player = { x: 0, y: 0 };
+        MazeGame.eggs = [];
+
+        MazeGame.touchStartX = 0;
+        MazeGame.touchStartY = 0;
+        MazeGame.swipeThreshold = 30; // Modern threshold
+        MazeGame.gameActive = false;
+
+        MazeGame.Cell = class Cell {
+            constructor(x, y) {
+                this.x = x;
+                this.y = y;
+                this.walls = { top: true, right: true, bottom: true, left: true };
+                this.visited = false;
+            }
+
+            getNeighbors() {
+                const neighbors = [];
+                const directions = [
+                    { dx: 0, dy: -1, wall1: 'top', wall2: 'bottom' },
+                    { dx: 1, dy: 0, wall1: 'right', wall2: 'left' },
+                    { dx: 0, dy: 1, wall1: 'bottom', wall2: 'top' },
+                    { dx: -1, dy: 0, wall1: 'left', wall2: 'right' }
+                ];
+                for (const dir of directions) {
+                    const nx = this.x + dir.dx;
+                    const ny = this.y + dir.dy;
+                    if (nx >= 0 && ny >= 0 && nx < MazeGame.cols && ny < MazeGame.rows) {
+                        const neighbor = MazeGame.maze[ny][nx];
+                        if (neighbor && !neighbor.visited) {
+                            neighbors.push({ cell: neighbor, wall1: dir.wall1, wall2: dir.wall2 });
+                        }
+                    }
+                }
+                return neighbors;
+            }
+        }
+
+        MazeGame.generateMaze = function(current) {
+            current.visited = true;
+            let S = [];
+            S.push(current);
+            while (S.length > 0) {
+                let c = S[S.length - 1];
+                const neighbors = c.getNeighbors().filter(n => n.cell && !n.cell.visited);
+                if (neighbors.length > 0) {
+                    const { cell: nextCell, wall1, wall2 } = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    c.walls[wall1] = false;
+                    nextCell.walls[wall2] = false;
+                    nextCell.visited = true;
+                    S.push(nextCell);
+                } else {
+                    S.pop();
+                }
+            }
+        }
+
+        MazeGame.setupMaze = function() {
+            MazeGame.maze = [];
+            MazeGame.eggs = [];
+            for (let y = 0; y < MazeGame.rows; y++) {
+                MazeGame.maze[y] = [];
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    MazeGame.maze[y][x] = new MazeGame.Cell(x, y);
+                }
+            }
+            if (MazeGame.maze[0] && MazeGame.maze[0][0]) {
+                MazeGame.generateMaze(MazeGame.maze[0][0]);
+            } else {
+                console.error("Maze starting cell undefined.");
+                return;
+            }
+
+            const deadEnds = [];
+            for (let y = 0; y < MazeGame.rows; y++) {
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
+                    const cell = MazeGame.maze[y][x];
+                    const closedWalls = Object.values(cell.walls).filter(w => w).length;
+                    if (closedWalls >= 3 && !(x === 0 && y === 0)) {
+                        deadEnds.push({ x, y });
+                    }
+                }
+            }
+            for (let i = deadEnds.length - 1; i > 0; i--) {
+                const j = Math.floor(Math.random() * (i + 1));
+                [deadEnds[i], deadEnds[j]] = [deadEnds[j], deadEnds[i]];
+            }
+
+            const eggData = [
+                { tooltip: 'LinkedIn', url: 'https://www.linkedin.com/in/nipuna-h-herath/', icon: 'linkedin' },
+                { tooltip: 'GitHub', url: 'https://github.com/kr4ckhe4d', icon: 'github' },
+                { tooltip: 'Instagram (About Me)', url: 'https://www.instagram.com/kr4ckhe4d/', icon: 'profile' }
+            ];
+
+            MazeGame.eggs = deadEnds.slice(0, Math.min(3, deadEnds.length, eggData.length)).map((pos, i) => ({
+                ...pos,
+                tooltip: eggData[i].tooltip,
+                url: eggData[i].url,
+                icon: eggData[i].icon
+            }));
+
+            if (MazeGame.eggs.length < 3) {
+                const occupiedSpots = new Set(MazeGame.eggs.map(e => `${e.x},${e.y}`));
+                if (!(MazeGame.player.x === 0 && MazeGame.player.y === 0)) occupiedSpots.add("0,0");
+                const potentialSpots = [
+                    {x: MazeGame.cols - 1, y: MazeGame.rows - 1}, {x: 0, y: MazeGame.rows - 2}, {x: MazeGame.cols - 2, y: 0},
+                    {x: 1, y: 1}, {x: MazeGame.cols-2, y: MazeGame.rows-2}
+                ];
+                for (let i = MazeGame.eggs.length; i < Math.min(3, eggData.length); i++) {
+                    for (const spot of potentialSpots) {
+                         const key = `${spot.x},${spot.y}`;
+                         if (spot.x < MazeGame.cols && spot.y < MazeGame.rows && !occupiedSpots.has(key)) {
+                            MazeGame.eggs.push({
+                                ...spot,
+                                tooltip: eggData[i % eggData.length].tooltip,
+                                url: eggData[i % eggData.length].url,
+                                icon: eggData[i % eggData.length].icon
+                            });
+                            occupiedSpots.add(key);
+                            if (MazeGame.eggs.length >=3) break;
+                         }
+                    }
+                     if (MazeGame.eggs.length >=3) break;
+                }
+            }
+            MazeGame.player = { x: 0, y: 0 };
+        }
+
+        MazeGame.drawPlayer = function(currentCellWidth, currentCellHeight) {
+            MazeGame.ctx.beginPath();
+            MazeGame.ctx.arc(
+                MazeGame.player.x * currentCellWidth + currentCellWidth / 2,
+                MazeGame.player.y * currentCellHeight + currentCellHeight / 2,
+                Math.min(currentCellWidth, currentCellHeight) / 3.5,
+                0, Math.PI * 2
+            );
+            MazeGame.ctx.fillStyle = '#00ffcc';
+            MazeGame.ctx.fill();
+            MazeGame.ctx.strokeStyle = '#111';
+            MazeGame.ctx.lineWidth = 2;
+        }
+
+        MazeGame.drawEggs = function(currentCellWidth, currentCellHeight) {
+            MazeGame.eggs.forEach(egg => {
+                const eggX = egg.x * currentCellWidth + currentCellWidth / 2;
+                const eggY = egg.y * currentCellHeight + currentCellHeight / 2;
+                const iconSizeBase = Math.min(currentCellWidth, currentCellHeight);
+
+                MazeGame.ctx.beginPath();
+                MazeGame.ctx.arc(eggX, eggY, iconSizeBase / 3, 0, Math.PI * 2);
+                MazeGame.ctx.fillStyle = 'gold';
+                MazeGame.ctx.fill();
+                MazeGame.ctx.strokeStyle = '#DAA520';
+                MazeGame.ctx.lineWidth = 1.5;
+                MazeGame.ctx.stroke();
+
+                MazeGame.ctx.fillStyle = '#333';
+                MazeGame.ctx.textAlign = 'center';
+                MazeGame.ctx.textBaseline = 'middle';
+                const iconFontSize = iconSizeBase / 2.8;
+
+                switch (egg.icon) {
+                    case 'linkedin':
+                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
+                        MazeGame.ctx.fillText("in", eggX, eggY + iconFontSize * 0.05);
+                        break;
+                    case 'github':
+                        const headRadius = iconSizeBase / 7;
+                        const bodyWidth = iconSizeBase / 3.5;
+                        const bodyHeight = iconSizeBase / 4.5;
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, eggY - headRadius / 1.5, headRadius, 0, Math.PI * 2);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.fillRect(eggX - bodyWidth / 2, eggY, bodyWidth, bodyHeight);
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.moveTo(eggX - headRadius, eggY - headRadius * 1.5);
+                        MazeGame.ctx.lineTo(eggX - headRadius / 2, eggY - headRadius * 2.5);
+                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.moveTo(eggX + headRadius, eggY - headRadius * 1.5);
+                        MazeGame.ctx.lineTo(eggX + headRadius / 2, eggY - headRadius * 2.5);
+                        MazeGame.ctx.lineTo(eggX, eggY - headRadius * 1.5);
+                        MazeGame.ctx.fill();
+                        break;
+                    case 'profile':
+                        const pHeadRadius = iconSizeBase / 6;
+                        const pShoulderY = eggY + pHeadRadius / 1.5;
+                        const pShoulderWidth = iconSizeBase / 3;
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, eggY - pHeadRadius / 2, pHeadRadius, 0, Math.PI * 2);
+                        MazeGame.ctx.fill();
+                        MazeGame.ctx.beginPath();
+                        MazeGame.ctx.arc(eggX, pShoulderY, pShoulderWidth / 2, Math.PI, 0, false);
+                        MazeGame.ctx.fill();
+                        break;
+                    default:
+                        MazeGame.ctx.font = `bold ${iconFontSize}px Arial`;
+                        MazeGame.ctx.fillText("?", eggX, eggY);
+                }
+            });
+        }
+
+        MazeGame.showMessage = function(text) {
+            MazeGame.gameMessage.textContent = text;
+            MazeGame.gameMessage.style.opacity = 1;
+            setTimeout(() => {
+                MazeGame.gameMessage.style.opacity = 0;
+            }, 2500); 
+        }
+
+        MazeGame.checkCollision = function(dx, dy) {
+            if (!MazeGame.maze[MazeGame.player.y] || !MazeGame.maze[MazeGame.player.y][MazeGame.player.x]) {
+                return true;
+            }
+            const cell = MazeGame.maze[MazeGame.player.y][MazeGame.player.x];
+            if (dx === 1 && cell.walls.right) return true;
+            if (dx === -1 && cell.walls.left) return true;
+            if (dy === 1 && cell.walls.bottom) return true;
+            if (dy === -1 && cell.walls.top) return true;
+            return false;
+        }
+
+        MazeGame.movePlayer = function(dx, dy) {
+            if (MazeGame.checkCollision(dx, dy)) return;
+            const newX = MazeGame.player.x + dx;
+            const newY = MazeGame.player.y + dy;
+            if (newX >= 0 && newY >= 0 && newX < MazeGame.cols && newY < MazeGame.rows) {
+                MazeGame.player.x = newX;
+                MazeGame.player.y = newY;
+                const egg = MazeGame.eggs.find(e => e.x === newX && e.y === newY);
+                if (egg) {
+                    MazeGame.showMessage(`Opening ${egg.tooltip}...`);
+                    if (egg.url && egg.url !== '#') {
+                        setTimeout(() => { window.open(egg.url, '_blank'); }, 1000);
+                    }
+                }
+                MazeGame.render();
+            }
+        }
+
+        MazeGame.handleMouseMove = function(e) {
+            const rect = MazeGame.canvas.getBoundingClientRect();
+            const mouseX = e.clientX - rect.left;
+            const mouseY = e.clientY - rect.top;
+            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
+            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
+
+            if (mouseX < 0 || mouseY < 0 || mouseX >= MazeGame.canvas.width || mouseY >= MazeGame.canvas.height) {
+                MazeGame.tooltipMessage.style.display = 'none';
+                return;
+            }
+            const cellX = Math.floor(mouseX / currentCellWidth);
+            const cellY = Math.floor(mouseY / currentCellHeight);
+            const egg = MazeGame.eggs.find(e => e.x === cellX && e.y === cellY);
+
+            if (egg) {
+                MazeGame.tooltipMessage.textContent = egg.tooltip;
+                MazeGame.tooltipMessage.style.left = (e.pageX + 10) + 'px';
+                MazeGame.tooltipMessage.style.top = (e.pageY + 10) + 'px';
+                MazeGame.tooltipMessage.style.display = 'block';
+            } else {
+                MazeGame.tooltipMessage.style.display = 'none';
+            }
+        }
+
+        MazeGame.handleTouchStart = function(e) {
+            e.preventDefault();
+            const touch = e.touches[0];
+            MazeGame.touchStartX = touch.clientX;
+            MazeGame.touchStartY = touch.clientY;
+        }
+
+        MazeGame.handleTouchEnd = function(e) {
+            e.preventDefault();
+            if (e.changedTouches.length === 0) return;
+            const touch = e.changedTouches[0];
+            const touchEndX = touch.clientX;
+            const touchEndY = touch.clientY;
+            const dX = touchEndX - MazeGame.touchStartX;
+            const dY = touchEndY - MazeGame.touchStartY;
+
+            if (Math.abs(dX) > Math.abs(dY)) {
+                if (Math.abs(dX) > MazeGame.swipeThreshold) MazeGame.movePlayer(dX > 0 ? 1 : -1, 0);
+            } else {
+                if (Math.abs(dY) > MazeGame.swipeThreshold) MazeGame.movePlayer(0, dY > 0 ? 1 : -1);
+            }
+        }
+
+        MazeGame.handleKeyDown = function(e) {
+            let moved = false;
+            switch (e.key) {
+                case 'ArrowUp': case 'w': case 'W': MazeGame.movePlayer(0, -1); moved = true; break;
+                case 'ArrowRight': case 'd': case 'D': MazeGame.movePlayer(1, 0); moved = true; break;
+                case 'ArrowDown': case 's': case 'S': MazeGame.movePlayer(0, 1); moved = true; break;
+                case 'ArrowLeft': case 'a': case 'A': MazeGame.movePlayer(-1, 0); moved = true; break;
+            }
+            if (moved) e.preventDefault();
+        }
+
+        MazeGame.resizeCanvas = function() {
+            const containerWidth = MazeGame.gameContainer.clientWidth;
+            const containerHeight = MazeGame.gameContainer.clientHeight;
+            const navElement = document.querySelector('nav');
+            const navHeight = navElement ? navElement.offsetHeight : 0;
+            
+            const availableHeight = window.innerHeight - navHeight - 20; 
+            const availableWidth = window.innerWidth - 20; 
+
+            const effectiveWidth = Math.min(availableWidth, containerWidth);
+            const effectiveHeight = Math.min(availableHeight, containerHeight);
+
+            const size = Math.min(effectiveWidth, effectiveHeight) * 0.98;
+
+            MazeGame.canvas.width = Math.max(200, size);
+            MazeGame.canvas.height = Math.max(200, size);
+
+            if (MazeGame.gameActive) MazeGame.render();
+        }
+
+        MazeGame.render = function() {
+            if (!MazeGame.maze.length || !MazeGame.maze[0] || !MazeGame.maze[0].length || !MazeGame.ctx) return;
+            MazeGame.ctx.clearRect(0, 0, MazeGame.canvas.width, MazeGame.canvas.height);
+            const currentCellWidth = MazeGame.canvas.width / MazeGame.cols;
+            const currentCellHeight = MazeGame.canvas.height / MazeGame.rows;
+
+            MazeGame.ctx.strokeStyle = '#fff';
+            MazeGame.ctx.lineWidth = Math.max(1, Math.min(currentCellWidth, currentCellHeight) / 15);
+
+            for (let y = 0; y < MazeGame.rows; y++) {
+                for (let x = 0; x < MazeGame.cols; x++) {
+                    if (!MazeGame.maze[y] || !MazeGame.maze[y][x]) continue;
+                    const cell = MazeGame.maze[y][x];
+                    const drawX = x * currentCellWidth;
+                    const drawY = y * currentCellHeight;
+                    if (cell.walls.top) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY); MazeGame.ctx.stroke(); }
+                    if (cell.walls.right) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX + currentCellWidth, drawY); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
+                    if (cell.walls.bottom) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY + currentCellHeight); MazeGame.ctx.lineTo(drawX + currentCellWidth, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
+                    if (cell.walls.left) { MazeGame.ctx.beginPath(); MazeGame.ctx.moveTo(drawX, drawY); MazeGame.ctx.lineTo(drawX, drawY + currentCellHeight); MazeGame.ctx.stroke(); }
+                }
+            }
+            MazeGame.drawEggs(currentCellWidth, currentCellHeight);
+            MazeGame.drawPlayer(currentCellWidth, currentCellHeight);
+        }
+
+
+        MazeGame.startGame = function() {
+            if (MazeGame.gameActive) return;
+            if (!MazeGame.canvas || !MazeGame.ctx) { setTimeout(MazeGame.startGame, 100); return; }
+            MazeGame.resizeCanvas();
+            MazeGame.setupMaze();
+            if (MazeGame.maze.length > 0) {
+                MazeGame.render();
+                MazeGame.canvas.style.opacity = 1;
+                MazeGame.gameActive = true;
+                document.addEventListener('keydown', (e) => MazeGame.handleKeyDown(e));
+                MazeGame.canvas.addEventListener('mousemove', (e) => MazeGame.handleMouseMove(e));
+                MazeGame.canvas.addEventListener('mouseout', () => { MazeGame.tooltipMessage.style.display = 'none'; });
+                MazeGame.canvas.addEventListener('touchstart', (e) => MazeGame.handleTouchStart(e), { passive: false });
+                MazeGame.canvas.addEventListener('touchend', (e) => MazeGame.handleTouchEnd(e), { passive: false });
+            } else {
+                MazeGame.showMessage("Error: Could not load game maze.");
+            }
+        }
+
+        MazeGame.showIntroMessages = function() {
+            MazeGame.introMessage1.style.opacity = 1;
+            setTimeout(() => {
+                MazeGame.introMessage1.style.opacity = 0;
+                setTimeout(() => {
+                    MazeGame.introMessage2.style.opacity = 1;
+                    setTimeout(() => {
+                        MazeGame.introMessage2.style.opacity = 0;
+                        setTimeout(MazeGame.startGame, 1000);
+                    }, 2000); 
+                }, 1000); 
+            }, 2000); 
+        }
+
+        MazeGame.initGame = function() {
+            this.showIntroMessages();
+            this.resizeCanvas(); // Initial resize
+            window.addEventListener('resize', () => this.resizeCanvas()); // Ensure 'this' is MazeGame
+        };
+
+        window.addEventListener('load', () => MazeGame.initGame());
+
+    </script>
+</body>
+</html>
